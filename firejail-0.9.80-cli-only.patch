@@ -1,0 +1,3787 @@
+diff -ruN '--exclude=config.log' '--exclude=config.mk' '--exclude=config.sh' '--exclude=config.status' '--exclude=*.o' '--exclude=*.d' '--exclude=firejail-0.9.80.tar.xz' firejail-0.9.80/CLI_ONLY.md package-cli-only/firejail-0.9.80-cli-only/CLI_ONLY.md
+--- firejail-0.9.80/CLI_ONLY.md	1970-01-01 00:00:00.000000000 +0000
++++ package-cli-only/firejail-0.9.80-cli-only/CLI_ONLY.md	2026-07-24 15:57:12.000000000 +0000
+@@ -0,0 +1,43 @@
++# Firejail 0.9.80 CLI-only variant
++
++This source tree removes Firejail desktop and automatic-launcher integration while preserving the command-line sandbox and its security mechanisms.
++
++## Removed
++
++- `firecfg`, its configuration, welcome script, manual page, completion file, install rules, and package entries.
++- `fzenity`, which was used by the desktop integration workflow.
++- Automatic sandbox startup based on an executable alias or symlink (`argv[0]` wrapper mode).
++
++## Preserved
++
++- `firejail`, `firemon`, `jailcheck`, profile building, tracing tools, and internal helpers.
++- Namespace, mount, capability, Seccomp, network, AppArmor, Landlock, D-Bus, X11, and AppImage functionality.
++- Restricted login-shell mode, where `argv[0]` starts with `-`.
++
++## Usage
++
++```bash
++firejail [OPTIONS] PROGRAM [ARGUMENTS...]
++firejail --profile=firefox firefox
++firejail --net=none curl https://example.com
++```
++
++Aliases such as `/usr/local/bin/firefox -> /usr/bin/firejail` are intentionally rejected.
++
++## Build
++
++```bash
++./configure --prefix=/usr
++make -j"$(nproc)"
++sudo make install
++```
++
++Staging installation:
++
++```bash
++make DESTDIR="$PWD/stage" install
++```
++
++## AppImage profile matching
++
++Upstream reused `firecfg.config` as an AppImage program-name list. This variant removes that coupling. AppImage profile lookup scans `~/.config/firejail` first and `/etc/firejail` second, selecting the longest profile-name prefix matching the AppImage filename.
+diff -ruN '--exclude=config.log' '--exclude=config.mk' '--exclude=config.sh' '--exclude=config.status' '--exclude=*.o' '--exclude=*.d' '--exclude=firejail-0.9.80.tar.xz' firejail-0.9.80/Makefile package-cli-only/firejail-0.9.80-cli-only/Makefile
+--- firejail-0.9.80/Makefile	2026-03-12 12:51:18.000000000 +0000
++++ package-cli-only/firejail-0.9.80-cli-only/Makefile	2026-07-24 15:58:32.000000000 +0000
+@@ -24,9 +24,9 @@
+ 
+ COMPLETIONDIRS = src/zsh_completion src/bash_completion
+ 
+-APPS = src/firecfg/firecfg src/firejail/firejail src/firemon/firemon src/profstats/profstats src/jailcheck/jailcheck src/etc-cleanup/etc-cleanup src/fbwrap/fbwrap
++APPS = src/firejail/firejail src/firemon/firemon src/profstats/profstats src/jailcheck/jailcheck src/etc-cleanup/etc-cleanup src/fbwrap/fbwrap
+ SBOX_APPS = src/fbuilder/fbuilder src/ftee/ftee
+-SBOX_APPS_NON_DUMPABLE = src/fcopy/fcopy src/fldd/fldd src/fnet/fnet src/fnetfilter/fnetfilter src/fzenity/fzenity
++SBOX_APPS_NON_DUMPABLE = src/fcopy/fcopy src/fldd/fldd src/fnet/fnet src/fnetfilter/fnetfilter
+ SBOX_APPS_NON_DUMPABLE += src/fsec-optimize/fsec-optimize src/fsec-print/fsec-print src/fseccomp/fseccomp
+ SBOX_APPS_NON_DUMPABLE += src/fnettrace/fnettrace src/fnettrace-dns/fnettrace-dns src/fnettrace-sni/fnettrace-sni
+ SBOX_APPS_NON_DUMPABLE += src/fnettrace-icmp/fnettrace-icmp src/fnetlock/fnetlock
+@@ -213,13 +213,10 @@
+ endif
+ 	# firemon executable
+ 	$(INSTALL) -m 0755 -t $(DESTDIR)$(bindir) src/firemon/firemon
+-	# firecfg executable
+-	$(INSTALL) -m 0755 -t $(DESTDIR)$(bindir) src/firecfg/firecfg
+ 	# jailcheck executable
+ 	$(INSTALL) -m 0755 -t $(DESTDIR)$(bindir) src/jailcheck/jailcheck
+ 	# libraries and plugins
+ 	$(INSTALL) -m 0755 -d $(DESTDIR)$(libdir)/firejail
+-	$(INSTALL) -m 0755 -t $(DESTDIR)$(libdir)/firejail src/firecfg/firejail-welcome.sh
+ 	$(INSTALL) -m 0644 -t $(DESTDIR)$(libdir)/firejail $(MYLIBS) $(SECCOMP_FILTERS)
+ 	$(INSTALL) -m 0755 -t $(DESTDIR)$(libdir)/firejail $(SBOX_APPS)
+ 	$(INSTALL) -m 0755 -t $(DESTDIR)$(libdir)/firejail src/profstats/profstats
+@@ -248,8 +245,6 @@
+ 	$(INSTALL) -m 0644 -t $(DESTDIR)$(docdir) COPYING README RELNOTES etc/templates/*
+ 	# profiles and settings
+ 	$(INSTALL) -m 0755 -d $(DESTDIR)$(sysconfdir)/firejail
+-	$(INSTALL) -m 0755 -d $(DESTDIR)$(sysconfdir)/firejail/firecfg.d
+-	$(INSTALL) -m 0644 -t $(DESTDIR)$(sysconfdir)/firejail src/firecfg/firecfg.config
+ 	$(INSTALL) -m 0644 -t $(DESTDIR)$(sysconfdir)/firejail etc/firejail.config
+ 	@printf 'Installing profiles...\n'
+ 	@$(INSTALL) -m 0644 -t $(DESTDIR)$(sysconfdir)/firejail $(PROFILES_INC) $(PROFILES_NET) $(PROFILES_PRO)
+@@ -285,7 +280,6 @@
+ 	$(INSTALL) -m 0755 -d $(DESTDIR)$(datarootdir)/bash-completion/completions
+ 	$(INSTALL) -m 0644 src/bash_completion/firejail.bash_completion $(DESTDIR)$(datarootdir)/bash-completion/completions/firejail
+ 	$(INSTALL) -m 0644 src/bash_completion/firemon.bash_completion $(DESTDIR)$(datarootdir)/bash-completion/completions/firemon
+-	$(INSTALL) -m 0644 src/bash_completion/firecfg.bash_completion $(DESTDIR)$(datarootdir)/bash-completion/completions/firecfg
+ 	# zsh completion
+ 	$(INSTALL) -m 0755 -d $(DESTDIR)$(datarootdir)/zsh/site-functions
+ 	$(INSTALL) -m 0644 -t $(DESTDIR)$(datarootdir)/zsh/site-functions src/zsh_completion/_firejail
+@@ -297,7 +291,6 @@
+ uninstall: config.mk
+ 	$(RM) $(DESTDIR)$(bindir)/firejail
+ 	$(RM) $(DESTDIR)$(bindir)/firemon
+-	$(RM) $(DESTDIR)$(bindir)/firecfg
+ 	$(RM) $(DESTDIR)$(bindir)/jailcheck
+ 	$(RM) -r $(DESTDIR)$(libdir)/firejail
+ 	$(RM) -r $(DESTDIR)$(datarootdir)/doc/firejail
+@@ -305,7 +298,6 @@
+ 	$(RM) $(addprefix $(DESTDIR)$(mandir)/man5/,$(notdir $(MANPAGES5_GZ)))
+ 	$(RM) $(DESTDIR)$(datarootdir)/bash-completion/completions/firejail
+ 	$(RM) $(DESTDIR)$(datarootdir)/bash-completion/completions/firemon
+-	$(RM) $(DESTDIR)$(datarootdir)/bash-completion/completions/firecfg
+ 	$(RM) $(DESTDIR)$(datarootdir)/zsh/site-functions/_firejail
+ 	$(RM) $(DESTDIR)$(datarootdir)/vim/vimfiles/ftdetect/firejail.vim
+ 	$(RM) $(DESTDIR)$(datarootdir)/vim/vimfiles/ftplugin/firejail.vim
+@@ -315,6 +307,7 @@
+ 
+ # Note: Keep this list in sync with `paths` in .github/workflows/build.yml.
+ DISTFILES = \
++	CLI_ONLY.md \
+ 	COPYING \
+ 	Makefile \
+ 	README \
+@@ -417,7 +410,7 @@
+ # make test
+ #
+ 
+-TESTS=apps chroot profiles capabilities firecfg network apparmor appimage utils environment filters fs fcopy fnettrace fnetfilter private-etc seccomp-extra
++TESTS=apps chroot profiles capabilities network apparmor appimage utils environment filters fs fcopy fnettrace fnetfilter private-etc seccomp-extra
+ TEST_TARGETS=$(patsubst %,test-%,$(TESTS))
+ 
+ $(TEST_TARGETS):
+@@ -428,5 +421,5 @@
+ lab-setup:; uname -r; ldd --version | grep GLIBC; pwd; whoami; ip addr show; cat /etc/resolv.conf; cat /etc/hosts; ls /etc
+ 
+ .PHONY: test
+-test:  lab-setup  test-apps test-chroot test-profiles test-capabilities test-firecfg test-network test-apparmor test-appimage test-utils test-environment test-filters test-fs test-fcopy test-fnettrace test-fnetfilter test-private-etc test-seccomp-extra
++test:  lab-setup  test-apps test-chroot test-profiles test-capabilities test-network test-apparmor test-appimage test-utils test-environment test-filters test-fs test-fcopy test-fnettrace test-fnetfilter test-private-etc test-seccomp-extra
+ 	echo "TESTING COMPLETE"
+diff -ruN '--exclude=config.log' '--exclude=config.mk' '--exclude=config.sh' '--exclude=config.status' '--exclude=*.o' '--exclude=*.d' '--exclude=firejail-0.9.80.tar.xz' firejail-0.9.80/contrib/syntax/lists/profile_conditionals.list package-cli-only/firejail-0.9.80-cli-only/contrib/syntax/lists/profile_conditionals.list
+--- firejail-0.9.80/contrib/syntax/lists/profile_conditionals.list	2026-03-12 13:06:51.000000000 +0000
++++ package-cli-only/firejail-0.9.80-cli-only/contrib/syntax/lists/profile_conditionals.list	2026-07-24 15:58:32.000000000 +0000
+@@ -1,9 +0,0 @@
+-ALLOW_TRAY
+-BROWSER_ALLOW_DRM
+-BROWSER_DISABLE_U2F
+-HAS_APPIMAGE
+-HAS_NET
+-HAS_NODBUS
+-HAS_NOSOUND
+-HAS_PRIVATE
+-HAS_X11
+diff -ruN '--exclude=config.log' '--exclude=config.mk' '--exclude=config.sh' '--exclude=config.status' '--exclude=*.o' '--exclude=*.d' '--exclude=firejail-0.9.80.tar.xz' firejail-0.9.80/etc/inc/disable-common.inc package-cli-only/firejail-0.9.80-cli-only/etc/inc/disable-common.inc
+--- firejail-0.9.80/etc/inc/disable-common.inc	2026-03-12 12:51:18.000000000 +0000
++++ package-cli-only/firejail-0.9.80-cli-only/etc/inc/disable-common.inc	2026-07-24 15:57:12.000000000 +0000
+@@ -635,7 +635,6 @@
+ 
+ # binaries installed by firejail
+ blacklist ${PATH}/firemon
+-blacklist ${PATH}/firecfg
+ blacklist ${PATH}/jailcheck
+ blacklist ${PATH}/firetools
+ 
+diff -ruN '--exclude=config.log' '--exclude=config.mk' '--exclude=config.sh' '--exclude=config.status' '--exclude=*.o' '--exclude=*.d' '--exclude=firejail-0.9.80.tar.xz' firejail-0.9.80/etc/profile-a-l/gnome-maps.profile package-cli-only/firejail-0.9.80-cli-only/etc/profile-a-l/gnome-maps.profile
+--- firejail-0.9.80/etc/profile-a-l/gnome-maps.profile	2026-03-12 12:51:18.000000000 +0000
++++ package-cli-only/firejail-0.9.80-cli-only/etc/profile-a-l/gnome-maps.profile	2026-07-24 15:57:12.000000000 +0000
+@@ -6,7 +6,7 @@
+ # Persistent global definitions
+ include globals.local
+ 
+-# Some distributions use gapplications to start gnome-maps over D-Bus. As firecfg cannot handle that, you need to run the following command.
++# Some distributions use gapplications to start gnome-maps over D-Bus. For explicit CLI launching, use the following desktop-file override when needed.
+ # sed -e "s/Exec=gapplication launch org.gnome.Maps %U/Exec=gnome-maps %U/" -e "s/DBusActivatable=true/DBusActivatable=false/" "/usr/share/applications/org.gnome.Maps.desktop" > "~/.local/share/applications/org.gnome.Maps.desktop"
+ 
+ # when gjs apps are started via gnome-shell, firejail is not applied because systemd will start them
+diff -ruN '--exclude=config.log' '--exclude=config.mk' '--exclude=config.sh' '--exclude=config.status' '--exclude=*.o' '--exclude=*.d' '--exclude=firejail-0.9.80.tar.xz' firejail-0.9.80/etc/profile-m-z/Xephyr.profile package-cli-only/firejail-0.9.80-cli-only/etc/profile-m-z/Xephyr.profile
+--- firejail-0.9.80/etc/profile-m-z/Xephyr.profile	2026-03-12 12:51:18.000000000 +0000
++++ package-cli-only/firejail-0.9.80-cli-only/etc/profile-m-z/Xephyr.profile	2026-07-24 15:57:12.000000000 +0000
+@@ -8,11 +8,9 @@
+ 
+ #
+ # This profile will sandbox Xephyr server itself when used with firejail --x11=xephyr.
+-# To enable it, create a firejail-Xephyr symlink in /usr/local/bin:
++# This profile can be used explicitly with:
+ #
+-#    $ sudo ln -s /usr/bin/firejail /usr/local/bin/Xephyr
+-#
+-# or run "sudo firecfg"
++#    $ firejail --profile=Xephyr Xephyr [OPTIONS]
+ #
+ 
+ whitelist /var/lib/xkb
+diff -ruN '--exclude=config.log' '--exclude=config.mk' '--exclude=config.sh' '--exclude=config.status' '--exclude=*.o' '--exclude=*.d' '--exclude=firejail-0.9.80.tar.xz' firejail-0.9.80/etc/profile-m-z/server.profile package-cli-only/firejail-0.9.80-cli-only/etc/profile-m-z/server.profile
+--- firejail-0.9.80/etc/profile-m-z/server.profile	2026-03-12 12:51:18.000000000 +0000
++++ package-cli-only/firejail-0.9.80-cli-only/etc/profile-m-z/server.profile	2026-07-24 15:57:12.000000000 +0000
+@@ -17,9 +17,8 @@
+ #       root@debian:~#
+ #
+ # Customize the profile as usual. Examples: unbound.profile, fdns.profile.
+-# All the rules for regular user profiles apply with the exception of
+-# /usr/local/bin symlink redirection and firecfg tool. The redirection is disabled
+-# by default for root user.
++# All the rules for regular user profiles apply. This CLI-only build does not
++# provide automatic launcher redirection.
+ 
+ # This file is overwritten after every install/update
+ # Persistent local customizations
+diff -ruN '--exclude=config.log' '--exclude=config.mk' '--exclude=config.sh' '--exclude=config.status' '--exclude=*.o' '--exclude=*.d' '--exclude=firejail-0.9.80.tar.xz' firejail-0.9.80/etc/profile-m-z/softmaker-common.profile package-cli-only/firejail-0.9.80-cli-only/etc/profile-m-z/softmaker-common.profile
+--- firejail-0.9.80/etc/profile-m-z/softmaker-common.profile	2026-03-12 12:51:18.000000000 +0000
++++ package-cli-only/firejail-0.9.80-cli-only/etc/profile-m-z/softmaker-common.profile	2026-07-24 15:57:12.000000000 +0000
+@@ -7,7 +7,7 @@
+ #include globals.local
+ 
+ # The official packages install the desktop file under /usr/local/share/applications
+-# with an absolute Exec line. These files are NOT handled by firecfg,
++# with an absolute Exec line. Explicit CLI invocation is unaffected,
+ # therefore you must manually copy them in you home and remove '/usr/bin/'.
+ 
+ noblacklist ${HOME}/SoftMaker
+diff -ruN '--exclude=config.log' '--exclude=config.mk' '--exclude=config.sh' '--exclude=config.status' '--exclude=*.o' '--exclude=*.d' '--exclude=firejail-0.9.80.tar.xz' firejail-0.9.80/etc/profile-m-z/xpra.profile package-cli-only/firejail-0.9.80-cli-only/etc/profile-m-z/xpra.profile
+--- firejail-0.9.80/etc/profile-m-z/xpra.profile	2026-03-12 12:51:18.000000000 +0000
++++ package-cli-only/firejail-0.9.80-cli-only/etc/profile-m-z/xpra.profile	2026-07-24 15:57:12.000000000 +0000
+@@ -9,11 +9,9 @@
+ 
+ #
+ # This profile will sandbox Xpra server itself when used with firejail --x11=xpra.
+-# To enable it, create a firejail-xpra symlink in /usr/local/bin:
++# This profile can be used explicitly with:
+ #
+-#    $ sudo ln -s /usr/bin/firejail /usr/local/bin/xpra
+-#
+-# or run "sudo firecfg"
++#    $ firejail --profile=xpra xpra [OPTIONS]
+ 
+ # Allow python (blacklisted by disable-interpreters.inc)
+ include allow-python2.inc
+diff -ruN '--exclude=config.log' '--exclude=config.mk' '--exclude=config.sh' '--exclude=config.status' '--exclude=*.o' '--exclude=*.d' '--exclude=firejail-0.9.80.tar.xz' firejail-0.9.80/etc/templates/profile.template package-cli-only/firejail-0.9.80-cli-only/etc/templates/profile.template
+--- firejail-0.9.80/etc/templates/profile.template	2026-03-12 12:51:18.000000000 +0000
++++ package-cli-only/firejail-0.9.80-cli-only/etc/templates/profile.template	2026-07-24 15:57:12.000000000 +0000
+@@ -14,9 +14,7 @@
+ #    submitting a pull request
+ #  - keep the sections structure, use a single empty line as separator
+ #  - entries within sections are alphabetically sorted
+-#  - consider putting binary into src/firecfg/firecfg.config (keep list sorted) but beware
+-#    to not do this for essential utilities as this may *break* your OS! (related discussion:
+-#    https://github.com/netblue30/firejail/issues/2507)
++#  - test the profile by invoking the program explicitly through the firejail command
+ #  - remove this comment section and any generic comment past 'Persistent global definitions'
+ #
+ # Sections structure
+diff -ruN '--exclude=config.log' '--exclude=config.mk' '--exclude=config.sh' '--exclude=config.status' '--exclude=*.o' '--exclude=*.d' '--exclude=firejail-0.9.80.tar.xz' firejail-0.9.80/platform/rpm/firejail.spec package-cli-only/firejail-0.9.80-cli-only/platform/rpm/firejail.spec
+--- firejail-0.9.80/platform/rpm/firejail.spec	2026-03-12 12:51:18.000000000 +0000
++++ package-cli-only/firejail-0.9.80-cli-only/platform/rpm/firejail.spec	2026-07-24 15:57:12.000000000 +0000
+@@ -33,17 +33,14 @@
+ %doc
+ %defattr(-, root, root, -)
+ %attr(4755, -, -) %{_bindir}/__NAME__
+-%{_bindir}/firecfg
+ %{_bindir}/firemon
+ %{_bindir}/jailcheck
+ %{_libdir}/__NAME__
+ %{_datarootdir}/bash-completion/completions/__NAME__
+-%{_datarootdir}/bash-completion/completions/firecfg
+ %{_datarootdir}/bash-completion/completions/firemon
+ %{_datarootdir}/zsh/site-functions/_firejail
+ %{_docdir}/__NAME__
+ %{_mandir}/man1/__NAME__.1.gz
+-%{_mandir}/man1/firecfg.1.gz
+ %{_mandir}/man1/firemon.1.gz
+ %{_mandir}/man1/jailcheck.1.gz
+ %{_mandir}/man5/__NAME__-login.5.gz
+diff -ruN '--exclude=config.log' '--exclude=config.mk' '--exclude=config.sh' '--exclude=config.status' '--exclude=*.o' '--exclude=*.d' '--exclude=firejail-0.9.80.tar.xz' firejail-0.9.80/src/bash_completion/firecfg.bash_completion package-cli-only/firejail-0.9.80-cli-only/src/bash_completion/firecfg.bash_completion
+--- firejail-0.9.80/src/bash_completion/firecfg.bash_completion	2026-03-12 12:51:18.000000000 +0000
++++ package-cli-only/firejail-0.9.80-cli-only/src/bash_completion/firecfg.bash_completion	1970-01-01 00:00:00.000000000 +0000
+@@ -1,36 +0,0 @@
+-# bash completion for firecfg                          -*- shell-script -*-
+-#********************************************************************
+-# Script based on completions/configure script in bash-completion package in
+-# Debian. The original package is release under GPL v2 license, the webpage is
+-# http://bash-completion.alioth.debian.org
+-#*******************************************************************
+-
+-_firecfg()
+-{
+-    local cur prev words cword split
+-    _init_completion -s || return
+-
+-    case $prev in
+-        --help|--version)
+-            return
+-            ;;
+-    esac
+-
+-    $split && return 0
+-
+-    # if $COMP_CONFIGURE_HINTS is not null, then completions of the form
+-    # --option=SETTING will include 'SETTING' as a contextual hint
+-    [[ "$cur" != -* ]] && return 0
+-
+-    if [[ -n $COMP_CONFIGURE_HINTS ]]; then
+-        COMPREPLY=( $( compgen -W "$( $1 --help 2>&1 | \
+-            awk '/^  --[A-Za-z]/ { print $1; \
+-            if ($2 ~ /--[A-Za-z]/) print $2 }' | sed -e 's/[[,].*//g' )" \
+-            -- "$cur" ) )
+-        [[ $COMPREPLY == *=* ]] && compopt -o nospace
+-    else
+-        COMPREPLY=( $( compgen -W '$( _parse_help "$1" )' -- "$cur" ) )
+-        [[ $COMPREPLY == *= ]] && compopt -o nospace
+-    fi
+-} &&
+-complete -F _firecfg firecfg
+diff -ruN '--exclude=config.log' '--exclude=config.mk' '--exclude=config.sh' '--exclude=config.status' '--exclude=*.o' '--exclude=*.d' '--exclude=firejail-0.9.80.tar.xz' firejail-0.9.80/src/firecfg/Makefile package-cli-only/firejail-0.9.80-cli-only/src/firecfg/Makefile
+--- firejail-0.9.80/src/firecfg/Makefile	2026-03-12 12:51:18.000000000 +0000
++++ package-cli-only/firejail-0.9.80-cli-only/src/firecfg/Makefile	1970-01-01 00:00:00.000000000 +0000
+@@ -1,12 +0,0 @@
+-.SUFFIXES:
+-ROOT = ../..
+--include $(ROOT)/config.mk
+-
+-MOD = firecfg
+-MOD_DIR = $(ROOT)/src/$(MOD)
+-PROG = $(MOD_DIR)/$(MOD)
+-TARGET = $(PROG)
+-
+-EXTRA_OBJS = ../lib/common.o ../lib/firejail_user.o
+-
+-include $(ROOT)/src/prog.mk
+diff -ruN '--exclude=config.log' '--exclude=config.mk' '--exclude=config.sh' '--exclude=config.status' '--exclude=*.o' '--exclude=*.d' '--exclude=firejail-0.9.80.tar.xz' firejail-0.9.80/src/firecfg/desktop_files.c package-cli-only/firejail-0.9.80-cli-only/src/firecfg/desktop_files.c
+--- firejail-0.9.80/src/firecfg/desktop_files.c	2026-03-12 12:51:18.000000000 +0000
++++ package-cli-only/firejail-0.9.80-cli-only/src/firecfg/desktop_files.c	1970-01-01 00:00:00.000000000 +0000
+@@ -1,365 +0,0 @@
+-/*
+- * Copyright (C) 2014-2026 Firejail Authors
+- *
+- * This file is part of firejail project
+- *
+- * This program is free software; you can redistribute it and/or modify
+- * it under the terms of the GNU General Public License as published by
+- * the Free Software Foundation; either version 2 of the License, or
+- * (at your option) any later version.
+- *
+- * This program is distributed in the hope that it will be useful,
+- * but WITHOUT ANY WARRANTY; without even the implied warranty of
+- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+- * GNU General Public License for more details.
+- *
+- * You should have received a copy of the GNU General Public License along
+- * with this program; if not, write to the Free Software Foundation, Inc.,
+- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+-*/
+-
+-#include "firecfg.h"
+-#include <ctype.h>
+-
+-static int check_profile(const char *name, const char *homedir) {
+-	(void) homedir;
+-	// build profile name
+-	char *profname1;
+-#ifndef HAVE_ONLY_SYSCFG_PROFILES
+-	char *profname2;
+-#endif
+-	if (asprintf(&profname1, "%s/%s.profile", SYSCONFDIR, name) == -1)
+-		errExit("asprintf");
+-
+-#ifndef HAVE_ONLY_SYSCFG_PROFILES
+-	if (asprintf(&profname2, "%s/.config/firejail/%s.profile", homedir, name) == -1)
+-		errExit("asprintf");
+-#endif
+-
+-	int rv = 0;
+-	if (access(profname1, R_OK) == 0) {
+-		if (arg_debug)
+-			printf("found %s\n", profname1);
+-		rv = 1;
+-	}
+-#ifndef HAVE_ONLY_SYSCFG_PROFILES
+-	else if (access(profname2, R_OK) == 0) {
+-		if (arg_debug)
+-			printf("found %s\n", profname2);
+-		rv = 1;
+-	}
+-#endif
+-
+-	free(profname1);
+-#ifndef HAVE_ONLY_SYSCFG_PROFILES
+-	free(profname2);
+-#endif
+-	return rv;
+-}
+-
+-
+-// look for a profile file in /etc/firejail and ~/.config/firejail
+-static int have_profile(const char *filename, const char *homedir) {
+-	assert(filename);
+-	assert(homedir);
+-
+-	if (arg_debug)
+-		printf("checking profile for %s\n", filename);
+-
+-	// we get strange names here, such as .org.gnome.gedit.desktop, com.uploadedlobster.peek.desktop,
+-	// or io.github.Pithos.desktop; extract the word before .desktop
+-
+-	char *tmpfname = strdup(filename);
+-	if (!tmpfname)
+-		errExit("strdup");
+-
+-	// check .desktop extension
+-	int len = strlen(tmpfname);
+-	if (len <= 8) {
+-		free(tmpfname);
+-		return 0;
+-	}
+-	if (strcmp(tmpfname + len - 8, ".desktop")) {
+-		free(tmpfname);
+-		return 0;
+-	}
+-
+-	// strip ".desktop"
+-	tmpfname[len - 8] = '\0';
+-
+-	// check full filename (without .desktop)
+-	int rv = check_profile(tmpfname, homedir);
+-	if (rv) {
+-		free(tmpfname);
+-		return rv;
+-	}
+-
+-	// extract last word
+-	char *last_word = strrchr(tmpfname, '.');
+-	if (last_word)
+-		last_word++;
+-	else
+-		last_word = tmpfname;
+-
+-	// try lowercase
+-	last_word[0] = tolower(last_word[0]);
+-	rv = check_profile(last_word, homedir);
+-	if (rv) {
+-		free(tmpfname);
+-		return rv;
+-	}
+-
+-	// try uppercase
+-	last_word[0] = toupper(last_word[0]);
+-	rv = check_profile(last_word, homedir);
+-	free(tmpfname);
+-	return rv;
+-}
+-
+-void fix_desktop_files(const char *homedir) {
+-	assert(homedir);
+-	struct stat sb;
+-
+-	// check user
+-	if (getuid() == 0) {
+-		fprintf(stderr, "Error: this option is not supported for root user; please run as a regular user.\n");
+-		exit(1);
+-	}
+-
+-	// build ignorelist
+-	parse_config_all(0);
+-
+-	// destination
+-	// create ~/.local/share/applications directory if necessary
+-	char *user_apps_dir;
+-	if (asprintf(&user_apps_dir, "%s/.local/share/applications", homedir) == -1)
+-		errExit("asprintf");
+-	printf("\nFixing desktop files in %s\n", user_apps_dir);
+-	if (stat(user_apps_dir, &sb) == -1) {
+-		char *tmp;
+-		if (asprintf(&tmp, "%s/.local", homedir) == -1)
+-			errExit("asprintf");
+-		int rv = mkdir(tmp, 0755);
+-		(void) rv;
+-		free(tmp);
+-
+-		if (asprintf(&tmp, "%s/.local/share", homedir) == -1)
+-			errExit("asprintf");
+-		rv = mkdir(tmp, 0755);
+-		(void) rv;
+-		free(tmp);
+-
+-		rv = mkdir(user_apps_dir, 0700);
+-		if (rv) {
+-			perror("mkdir");
+-			fprintf(stderr, "Warning: cannot create ~/.local/share/application directory, desktop files fixing skipped...\n");
+-			free(user_apps_dir);
+-			return;
+-		}
+-		rv = chmod(user_apps_dir, 0700);
+-		(void) rv;
+-	}
+-
+-	// source
+-	DIR *dir = opendir("/usr/share/applications");
+-	if (!dir || chdir("/usr/share/applications")) {
+-		perror("opendir");
+-		fprintf(stderr, "Warning: cannot access /usr/share/applications directory, desktop files fixing skipped...\n");
+-		free(user_apps_dir);
+-		if (dir)
+-			closedir(dir);
+-		return;
+-	}
+-
+-	// copy
+-	struct dirent *entry;
+-	while ((entry = readdir(dir)) != NULL) {
+-		const char *filename = entry->d_name;
+-		if (strcmp(filename, ".") == 0 || strcmp(filename, "..") == 0)
+-			continue;
+-
+-		// skip if not regular file or link
+-		// d_type is not available on some file systems
+-		if (entry->d_type != DT_REG && entry->d_type != DT_LNK && entry->d_type != DT_UNKNOWN)
+-			continue;
+-
+-		// skip if not .desktop file
+-		char *exec = strdup(filename);
+-		if (!exec)
+-			errExit("strdup");
+-		char *ptr = strrchr(exec, '.');
+-		if (ptr == NULL || strcmp(ptr, ".desktop") != 0) {
+-			printf("   %s skipped (not a .desktop file)\n", exec);
+-			free(exec);
+-			continue;
+-		}
+-
+-		// skip if program is in ignorelist
+-		*ptr = '\0';
+-		if (in_ignorelist(exec)) {
+-			printf("   %s ignored\n", exec);
+-			free(exec);
+-			continue;
+-		}
+-
+-		free(exec);
+-
+-		// skip links - Discord on Arch #4235 seems to be a symlink to /opt directory
+-//		if (is_link(filename))
+-//			continue;
+-
+-		// no profile in /etc/firejail, no desktop file fixing
+-		if (!have_profile(filename, homedir))
+-			continue;
+-
+-		//****************************************************
+-		// load the file in memory and do some basic checking
+-		//****************************************************
+-		FILE *fp = fopen(filename, "r");
+-		if (!fp) {
+-			fprintf(stderr, "Warning: cannot open /usr/share/applications/%s\n", filename);
+-			continue;
+-		}
+-
+-		fseek(fp, 0, SEEK_END);
+-		long size = ftell(fp);
+-		if (size == -1)
+-			errExit("ftell");
+-		fseek(fp, 0, SEEK_SET);
+-		char *buf = malloc(size + 1);
+-		if (!buf)
+-			errExit("malloc");
+-
+-		size_t loaded = fread(buf, size, 1, fp);
+-		fclose(fp);
+-		if (loaded != 1) {
+-			fprintf(stderr, "Warning: cannot read /usr/share/applications/%s\n", filename);
+-			free(buf);
+-			continue;
+-		}
+-		buf[size] = '\0';
+-
+-		// check format
+-		if (strstr(buf, "[Desktop Entry]\n") == NULL) {
+-			if (arg_debug)
+-				printf("   %s - skipped: wrong format?\n", filename);
+-			free(buf);
+-			continue;
+-		}
+-
+-		// get executable name
+-		ptr = strstr(buf,"\nExec=");
+-		if (!ptr || strlen(ptr) < 7) {
+-			if (arg_debug)
+-				printf("   %s - skipped: wrong format?\n", filename);
+-			free(buf);
+-			continue;
+-		}
+-
+-		char *execname = ptr + 6;
+-		// executable name can be quoted, this is rare and currently unsupported, TODO
+-		if (execname[0] == '"') {
+-			if (arg_debug)
+-				printf("   %s - skipped: path quoting unsupported\n", filename);
+-			free(buf);
+-			continue;
+-		}
+-
+-		// try to decide if we need to convert this file
+-		char *change_exec = NULL;
+-		int change_dbus = 0;
+-
+-		if (strstr(buf, "\nDBusActivatable=true"))
+-			change_dbus = 1;
+-
+-		// https://specifications.freedesktop.org/desktop-entry-spec/latest/ar01s06.html
+-		// The executable program can either be specified with its full path
+-		// or with the name of the executable only
+-		if (execname[0] == '/') {
+-			// mark end of line
+-			char *end = strchr(execname, '\n');
+-			if (end)
+-				*end = '\0';
+-			end = strchr(execname, ' ');
+-			if (end)
+-				*end = '\0';
+-			char *start_name = strrchr(execname, '/');
+-			if (start_name) {
+-				start_name++;
+-				// check if we have the executable on the regular path
+-				if (which(start_name)) {
+-					change_exec = strdup(start_name);
+-					if (!change_exec)
+-						errExit("strdup");
+-				}
+-			}
+-		}
+-
+-		free(buf);
+-		if (change_exec == NULL && change_dbus == 0)
+-			continue;
+-
+-		//****************************************************
+-		// generate output file
+-		//****************************************************
+-		char *outname;
+-		if (asprintf(&outname ,"%s/%s", user_apps_dir, filename) == -1)
+-			errExit("asprintf");
+-
+-		if (stat(outname, &sb) == 0) {
+-			printf("   %s skipped: file exists\n", filename);
+-			free(outname);
+-			if (change_exec)
+-				free(change_exec);
+-			continue;
+-		}
+-
+-		FILE *fpin = fopen(filename, "r");
+-		if (!fpin) {
+-			fprintf(stderr, "Warning: cannot open /usr/share/applications/%s\n", filename);
+-			free(outname);
+-			if (change_exec)
+-				free(change_exec);
+-			continue;
+-		}
+-
+-		FILE *fpout = fopen(outname, "w");
+-		if (!fpout) {
+-			fprintf(stderr, "Warning: cannot open ~/.local/share/applications/%s\n", outname);
+-			fclose(fpin);
+-			free(outname);
+-			if (change_exec)
+-				free(change_exec);
+-			continue;
+-		}
+-		fprintf(fpout, "# converted by firecfg\n");
+-		free(outname);
+-
+-		char fbuf[MAX_BUF];
+-		while (fgets(fbuf, MAX_BUF, fpin)) {
+-			if (change_dbus && strcmp(fbuf, "DBusActivatable=true\n") == 0)
+-				fprintf(fpout, "DBusActivatable=false\n");
+-			else if (change_exec && strncmp(fbuf, "Exec=", 5) == 0) {
+-				char *start_params = strchr(fbuf + 5, ' ');
+-				if (start_params) {
+-					start_params++;
+-					fprintf(fpout, "Exec=%s %s", change_exec, start_params);
+-				}
+-				else
+-					fprintf(fpout, "Exec=%s\n", change_exec);
+-			}
+-			else
+-				fprintf(fpout, "%s", fbuf);
+-		}
+-
+-		if (change_exec)
+-			free(change_exec);
+-		fclose(fpin);
+-		fclose(fpout);
+-		printf("   %s created\n", filename);
+-
+-	}
+-
+-	closedir(dir);
+-	free(user_apps_dir);
+-}
+diff -ruN '--exclude=config.log' '--exclude=config.mk' '--exclude=config.sh' '--exclude=config.status' '--exclude=*.o' '--exclude=*.d' '--exclude=firejail-0.9.80.tar.xz' firejail-0.9.80/src/firecfg/firecfg.config package-cli-only/firejail-0.9.80-cli-only/src/firecfg/firecfg.config
+--- firejail-0.9.80/src/firecfg/firecfg.config	2026-03-12 13:04:50.000000000 +0000
++++ package-cli-only/firejail-0.9.80-cli-only/src/firecfg/firecfg.config	1970-01-01 00:00:00.000000000 +0000
+@@ -1,1079 +0,0 @@
+-# /etc/firejail/firecfg.config - firecfg utility configuration file
+-# This is the list of programs in alphabetical order handled by firecfg utility
+-#
+-# Note1: Normal comment lines should start with `# ` and commented code lines
+-# should start with just `#` (no spaces).
+-#
+-# Note2: Integrating text editors with Firejail may prevent users from
+-# modifying certain configuration files (see #6002). This includes many files
+-# in ~/.config and /etc. By default, firecfg does not create symbolic links in
+-# /usr/local/bin for text editors.
+-0ad
+-1password
+-2048-qt
+-Books
+-Builder
+-Cheese
+-Cryptocat
+-Cyberfox
+-Discord
+-DiscordCanary
+-DiscordPTB
+-Documents
+-FBReader
+-FossaMail
+-Fritzing
+-Gitter
+-JDownloader
+-Logs
+-Maelstrom
+-Maps
+-Mathematica
+-Natron
+-PCSX2
+-PPSSPPQt
+-PPSSPPSDL
+-Postman
+-QMediathekView
+-QOwnNotes
+-Screenshot
+-Telegram
+-Viber
+-VirtualBox
+-XMind
+-Xephyr
+-ZeGrapher
+-abiword
+-abrowser
+-akonadi_control
+-akregator
+-alacarte
+-alienblaster
+-alpine
+-alpinef
+-amarok
+-amule
+-amuled
+-android-studio
+-ani-cli
+-anki
+-anydesk
+-apktool
+-apostrophe
+-#ar # disable until we fix CLI archivers for makepkg on Arch (see discussion in #3095)
+-arch-audit
+-archaudit-report
+-ardour4
+-ardour5
+-arduino
+-aria2c
+-ark
+-arm
+-armcord
+-artha
+-assogiate
+-asunder
+-#atom # text editor (see Note2)
+-#atom-beta
+-#atool # disable until we fix CLI archivers for makepkg on Arch (see discussion in #3095)
+-atril
+-atril-previewer
+-atril-thumbnailer
+-audacious
+-audacity
+-audio-recorder
+-authenticator
+-authenticator-rs
+-autokey-gtk
+-autokey-qt
+-autokey-run
+-autokey-shell
+-avidemux3_cli
+-avidemux3_jobs_qt5
+-avidemux3_qt5
+-aweather
+-axel
+-b2sum # breaks with too many arguments, configure arg-max-count in /etc/firejail/firejail.config (see #4633)
+-b3sum # breaks with too many arguments, configure arg-max-count in /etc/firejail/firejail.config (see #4633)
+-ballbuster
+-baloo_file
+-baloo_filemetadata_temp_extractor
+-balsa
+-baobab
+-barrier
+-basilisk
+-bcompare
+-beaker
+-bibletime
+-#bijiben # webkit2gtk-4.x requires bwrap (see #3647)
+-bitcoin-qt
+-bitlbee
+-bitwarden
+-bitwarden-desktop
+-bleachbit
+-blender
+-blender-2.8
+-blender-3.6
+-bless
+-blobby
+-blobwars
+-bluefish
+-bnox
+-bpftop
+-brackets
+-brasero
+-brave
+-brave-browser
+-brave-browser-beta
+-brave-browser-dev
+-brave-browser-nightly
+-brave-browser-stable
+-#bunzip2 # disable until we fix CLI archivers for makepkg on Arch (see discussion in #3095)
+-#bzcat # disable until we fix CLI archivers for makepkg on Arch (see discussion in #3095)
+-bzflag
+-#bzip2 # disable until we fix CLI archivers for makepkg on Arch (see discussion in #3095)
+-cachy-browser
+-calibre
+-calligra
+-calligraauthor
+-calligraconverter
+-calligraflow
+-calligragemini
+-calligraplan
+-calligraplanwork
+-calligrasheets
+-calligrastage
+-calligrawords
+-cameramonitor
+-cantata
+-catfish
+-cawbird
+-celluloid
+-chafa
+-chatterino
+-checkbashisms
+-cheese
+-cherrytree
+-chromium
+-chromium-browser
+-chromium-browser-privacy
+-chromium-freeworld
+-cin
+-cinelerra
+-cinelerra-gg
+-cksum # breaks with too many arguments, configure arg-max-count in /etc/firejail/firejail.config (see #4633)
+-clac
+-clamdscan
+-clamdtop
+-clamscan
+-clamtk
+-claws-mail
+-clawsker
+-clementine
+-clion
+-clion-eap
+-clipgrab
+-clipit
+-cliqz
+-clocks
+-cloneit
+-cmus
+-code
+-code-oss
+-codium
+-cointop
+-cola
+-colorful
+-com.github.bleakgrey.tootle
+-com.github.dahenson.agenda
+-#com.github.johnfactotum.Foliate # webkit2gtk-4.x requires bwrap (see #3647)
+-com.github.phase1geo.minder
+-com.github.tchx84.Flatseal
+-com.gitlab.newsflash
+-conkeror
+-conky
+-conplay
+-corebird
+-coyim
+-crawl
+-crawl-tiles
+-crow
+-cryptocat
+-cvlc
+-cyberfox
+-d-feet
+-d-spy
+-daisy
+-darktable
+-dconf-editor
+-ddgr
+-ddgtk
+-deadbeef
+-deadlink
+-deluge
+-desktopeditors
+-devhelp
+-dex2jar
+-dexios
+-dia
+-dig
+-digikam
+-dillo
+-dino
+-dino-im
+-discord
+-discord-canary
+-discord-ptb
+-display
+-display-im6.q16
+-dnox
+-dnscrypt-proxy
+-#dnsmasq # server; problems with libvirt on Arch (see #6121)
+-dolphin-emu
+-dooble
+-dooble-qt4
+-dosbox
+-dragon
+-drawio
+-drill
+-dropbox
+-dtui
+-easystroke
+-ebook-convert
+-ebook-edit
+-ebook-meta
+-ebook-polish
+-ebook-viewer
+-editorconfiger
+-electron-mail
+-electrum
+-element-desktop
+-elinks
+-#emacs # text editor (see Note2)
+-empathy
+-enchant
+-enchant-2
+-enchant-lsmod
+-enchant-lsmod-2
+-engrampa
+-enox
+-enpass
+-eog
+-eom
+-ephemeral
+-#epiphany # see #2995
+-equalx
+-erd
+-et
+-etr
+-evince
+-evince-previewer
+-evince-thumbnailer
+-#evolution # see #3647
+-exfalso
+-exiftool
+-falkon
+-fbreader
+-feedreader
+-feh
+-ferdi
+-#ffmpeg
+-ffmpegthumbnailer
+-ffplay
+-ffprobe
+-file-roller
+-filezilla
+-firedragon
+-firefox
+-firefox-beta
+-firefox-developer-edition
+-firefox-esr
+-firefox-nightly
+-firefox-wayland
+-firefox-x11
+-five-or-more
+-fix-qdf
+-flacsplt
+-flameshot
+-flashpeak-slimjet
+-floorp
+-flowblade
+-fluffychat
+-#foliate # webkit2gtk-4.x requires bwrap (see #3647)
+-font-manager
+-fontforge
+-fossamail
+-four-in-a-row
+-fractal
+-fragments
+-franz
+-freecad
+-freecadcmd
+-freeciv
+-freeciv-gtk3
+-freeciv-mp-gtk3
+-freecol
+-freemind
+-freeoffice-planmaker
+-freeoffice-presentations
+-freeoffice-textmaker
+-freetube
+-freshclam
+-frogatto
+-frozen-bubble
+-ftp
+-funnyboat
+-gajim
+-gajim-history-manager
+-galculator
+-gallery-dl
+-gapplication
+-gcalccmd
+-gcloud
+-gconf-editor
+-gdu
+-#geany # text editor (see Note2)
+-#geary # webkit2gtk-4.x requires bwrap (see #3647)
+-#gedit # text editor (see Note2)
+-geekbench
+-geeqie
+-geki2
+-geki3
+-gfeeds
+-gh
+-ghb
+-#ghostwriter # text editor (see Note2)
+-gimp
+-gimp-2.10
+-gimp-2.8
+-gimp-3.0
+-gist
+-gist-paste
+-git-cola
+-gitg
+-github-desktop
+-gitter
+-#gjs # https://github.com/netblue30/firejail/issues/3333#issuecomment-612601102
+-gl-117
+-glaxium
+-globaltime
+-gmpc
+-gnome-2048
+-gnome-books
+-gnome-builder
+-gnome-calculator
+-gnome-calendar
+-gnome-character-map
+-gnome-characters
+-gnome-chess
+-gnome-clocks
+-gnome-contacts
+-gnome-documents
+-gnome-font-viewer
+-gnome-hexgl
+-gnome-keyring
+-gnome-keyring-3
+-gnome-keyring-daemon
+-gnome-klotski
+-gnome-latex
+-gnome-logs
+-gnome-mahjongg
+-gnome-maps
+-gnome-mines
+-gnome-mplayer
+-gnome-mpv
+-gnome-music
+-gnome-nettool
+-gnome-nibbles
+-gnome-passwordsafe
+-gnome-photos
+-gnome-pomodoro
+-gnome-recipes
+-gnome-robots
+-gnome-schedule
+-gnome-screenshot
+-gnome-sound-recorder
+-gnome-sudoku
+-gnome-system-log
+-gnome-taquin
+-gnome-tetravex
+-#gnome-text-editor # text editor (see Note2)
+-gnome-todo
+-gnome-twitch
+-gnome-weather
+-gnote
+-gnubik
+-godot
+-godot3
+-goldendict
+-goobox
+-google-chrome
+-google-chrome-beta
+-google-chrome-stable
+-google-chrome-unstable
+-google-earth
+-google-earth-pro
+-google-play-music-desktop-player
+-googler
+-gpa
+-gpicview
+-gpredict
+-gradio
+-gramps
+-gravity-beams-and-evaporating-stars
+-green-recorder
+-gthumb
+-gtk-lbry-viewer
+-gtk-pipe-viewer
+-gtk-straw-viewer
+-gtk-youtube-viewer
+-gtk2-youtube-viewer
+-gtk3-youtube-viewer
+-guayadeque
+-gucharmap
+-gummi
+-gwenview
+-gzdoom
+-halloy
+-handbrake
+-handbrake-gtk
+-hashcat
+-hedgewars
+-hexchat
+-highlight
+-hitori
+-homebank
+-host
+-hugin
+-hyperrogue
+-iagno
+-icecat
+-icedove
+-iceweasel
+-idea
+-idea.sh
+-ideaIC
+-imagej
+-img2txt
+-impressive
+-imv
+-inkscape
+-inkview
+-inox
+-io.github.lainsce.Notejot
+-ipcalc
+-ipcalc-ng
+-iridium
+-iridium-browser
+-irssi
+-jami
+-jd-gui
+-jdownloader
+-jerry
+-jitsi
+-jitsi-meet-desktop
+-journal-viewer
+-jumpnbump
+-jumpnbump-menu
+-k3b
+-kaffeine
+-kalgebra
+-kalgebramobile
+-karbon
+-#kate # text editor (see Note2)
+-kazam
+-kcalc
+-#kdeinit4
+-kdenlive
+-kdiff3
+-keepass
+-keepass2
+-keepassx
+-keepassx2
+-keepassxc
+-keepassxc-cli
+-keepassxc-proxy
+-#kfind
+-kget
+-kid3
+-kid3-cli
+-kid3-qt
+-kino
+-kiwix-desktop
+-klatexformula
+-klatexformula_cmdl
+-klavaro
+-kmail
+-kmplayer
+-knotes
+-kodi
+-kontact
+-konversation
+-kopete
+-koreader
+-krita
+-#krunner
+-ktorrent
+-ktouch
+-kube
+-#kwin_x11
+-#kwrite # text editor (see Note2)
+-lbreakouthd
+-lbry-viewer
+-lbry-viewer-gtk
+-#leafpad # text editor (see Note2))
+-#less # breaks man
+-lettura
+-librecad
+-libreoffice
+-librewolf
+-librewolf-nightly
+-lifeograph
+-liferea
+-lightsoff
+-lincity-ng
+-links
+-links2
+-linphone
+-linuxqq
+-lmms
+-lobase
+-lobster
+-localc
+-localsend_app
+-lodraw
+-loffice
+-lofromtemplate
+-loimpress
+-lollypop
+-lomath
+-loupe
+-loweb
+-lowriter
+-#lrunzip # disable until we fix CLI archivers for makepkg on Arch (see discussion in #3095)
+-#lrz # disable until we fix CLI archivers for makepkg on Arch (see discussion in #3095)
+-#lrzcat # disable until we fix CLI archivers for makepkg on Arch (see discussion in #3095)
+-#lrzip # disable until we fix CLI archivers for makepkg on Arch (see discussion in #3095)
+-#lrztar # disable until we fix CLI archivers for makepkg on Arch (see discussion in #3095)
+-#lrzuntar # disable until we fix CLI archivers for makepkg on Arch (see discussion in #3095)
+-luminance-hdr
+-lximage-qt
+-lxmusic
+-lynx
+-lyriek
+-lyx
+-#lz4 # disable until we fix CLI archivers for makepkg on Arch (see discussion in #3095)
+-#lz4c # disable until we fix CLI archivers for makepkg on Arch (see discussion in #3095)
+-#lz4cat # disable until we fix CLI archivers for makepkg on Arch (see discussion in #3095)
+-lzdoom
+-macrofusion
+-magicor
+-man
+-manaplus
+-marker
+-masterpdfeditor
+-masterpdfeditor4
+-masterpdfeditor5
+-mate-calc
+-mate-calculator
+-mate-color-select
+-mate-dictionary
+-mathematica
+-matrix-mirage
+-mattermost-desktop
+-mcabber
+-mcomix
+-#md5sum # breaks with too many arguments, configure arg-max-count in /etc/firejail/firejail.config (see #4633)
+-mediainfo
+-mediathekview
+-megaglest
+-megaglest_editor
+-meld
+-mencoder
+-mendeleydesktop
+-menulibre
+-metadata-cleaner
+-meteo-qt
+-microsoft-edge
+-microsoft-edge-beta
+-microsoft-edge-dev
+-microsoft-edge-stable
+-midori
+-min
+-mindless
+-minecraft-launcher
+-minetest
+-minitube
+-mirage
+-mirrormagic
+-mocp
+-#mousepad # text editor (see Note2)
+-mov-cli
+-mp3splt
+-mp3splt-gtk
+-mp3wrap
+-mpDris2
+-mpg123
+-mpg123-alsa
+-mpg123-id3dump
+-mpg123-jack
+-mpg123-nas
+-mpg123-openal
+-mpg123-oss
+-mpg123-portaudio
+-mpg123-pulse
+-mpg123-strip
+-mpg123.bin
+-mplayer
+-mpsyt
+-mpv
+-mrrescue
+-ms-excel
+-ms-office
+-ms-onenote
+-ms-outlook
+-ms-powerpoint
+-ms-skype
+-ms-word
+-mtpaint
+-mullvad-browser
+-multimc
+-multimc5
+-mumble
+-mupdf
+-mupdf-gl
+-mupdf-x11
+-mupdf-x11-curl
+-mupen64plus
+-muraster
+-musescore
+-musictube
+-musixmatch
+-mutool
+-mutt
+-mypaint
+-mypaint-ora-thumbnailer
+-#nano # text editor (see Note2)
+-natron
+-ncdu
+-ncdu2
+-#ne # text editor (see Note2)
+-neochat
+-neomutt
+-netactview
+-nethack
+-netsurf
+-neverball
+-neverputt
+-newsbeuter
+-newsboat
+-newsflash
+-nextcloud
+-nextcloud-desktop
+-nheko
+-nhex
+-nicotine
+-nitroshare
+-nitroshare-cli
+-nitroshare-nmh
+-nitroshare-send
+-nitroshare-ui
+-nomacs
+-notable
+-nslookup
+-nsxiv
+-nuclear
+-nylas
+-nyx
+-obs
+-ocenaudio
+-odt2txt
+-oggsplt
+-okular
+-onboard
+-onionshare
+-onionshare-cli
+-onionshare-gui
+-ooffice
+-ooviewdoc
+-open-invaders
+-openarena
+-openarena_ded
+-opencity
+-openclonk
+-openmw
+-openmw-launcher
+-openoffice.org
+-openshot
+-openshot-qt
+-openstego
+-openttd
+-opera
+-opera-beta
+-opera-developer
+-orage
+-org.gnome.seahorse.Application
+-ostrichriders
+-otter-browser
+-out123
+-palemoon
+-#pandoc
+-parole
+-patch
+-pavucontrol
+-pavucontrol-qt
+-pcsxr
+-pdfchain
+-pdfmod
+-pdfsam
+-pdftotext
+-peek
+-penguin-command
+-photoflare
+-picard
+-pidgin
+-pinball
+-ping
+-pingus
+-pinta
+-pioneer
+-pipe-viewer
+-pipe-viewer-gtk
+-pithos
+-pitivi
+-pix
+-planmaker18
+-planmaker18free
+-playonlinux
+-#pluma # text editor (see Note2)
+-plv
+-pngquant
+-polari
+-postman
+-ppsspp
+-pragha
+-presentations18
+-presentations18free
+-prismlauncher
+-profanity
+-psi
+-psi-plus
+-pybitmessage
+-#pycharm-community # FB note: may enable later
+-#pycharm-professional
+-#pzstd # disable until we fix CLI archivers for makepkg on Arch (see discussion in #3095)
+-qbittorrent
+-qcomicbook
+-qemu-launcher
+-#qemu-system-x86_64
+-qgis
+-qlipper
+-qmmp
+-qnapi
+-qpdf
+-qpdfview
+-qq
+-qt-faststart
+-qt5ct
+-qt6ct
+-qtox
+-quadrapassel
+-quakespasm
+-quassel
+-quaternion
+-quiterss
+-qupzilla
+-qutebrowser
+-raincat
+-rambox
+-reader
+-redeclipse
+-rednotebook
+-redshift
+-regextester
+-remmina
+-remmina-file-wrapper
+-retroarch
+-rhythmbox
+-rhythmbox-client
+-ricochet
+-riot-desktop
+-riot-web
+-ripperx
+-ristretto
+-rocketchat
+-rpcs3
+-rssguard
+-rtorrent
+-runenpass.sh
+-rymdport
+-sayonara
+-scallion
+-scorched3d
+-scorchwentbonkers
+-scribus
+-sdat2img
+-seafile-applet
+-seahorse
+-seahorse-adventures
+-seahorse-daemon
+-seahorse-tool
+-seamonkey
+-seamonkey-bin
+-secret-tool
+-session-desktop
+-session-messenger
+-session-messenger-desktop
+-#sha1sum # breaks with too many arguments, configure arg-max-count in /etc/firejail/firejail.config (see #4633)
+-#sha224sum # breaks with too many arguments, configure arg-max-count in /etc/firejail/firejail.config (see #4633)
+-#sha256sum # breaks with too many arguments, configure arg-max-count in /etc/firejail/firejail.config (see #4633)
+-#sha384sum # breaks with too many arguments, configure arg-max-count in /etc/firejail/firejail.config (see #4633)
+-#sha512sum # breaks with too many arguments, configure arg-max-count in /etc/firejail/firejail.config (see #4633)
+-shellcheck
+-shortwave
+-shotcut
+-shotwell
+-signal-cli
+-signal-desktop
+-silentarmy
+-simple-scan
+-simplescreenrecorder
+-simutrans
+-singularity
+-skanlite
+-skypeforlinux
+-slack
+-slashem
+-smplayer
+-smtube
+-smuxi-frontend-gnome
+-sniffnet
+-snox
+-soffice
+-sol
+-sound-juicer
+-soundconverter
+-#spectacle # may be broken on wayland (see #5127)
+-spectral
+-spotify
+-sqlitebrowser
+-srb2
+-ssh
+-#ssh-agent # problems on Arch with Fish shell (#1568)
+-standardnotes-desktop
+-start-tor-browser
+-statusof
+-steam
+-steam-native
+-steam-runtime
+-stellarium
+-straw-viewer
+-strawberry
+-strings
+-studio.sh
+-subdownloader
+-sum
+-supertux2
+-supertuxkart
+-surf
+-sushi
+-swell-foop
+-sylpheed
+-#syncthing # server
+-synfigstudio
+-sysprof
+-sysprof-cli
+-tb-starter-wrapper
+-teams
+-teams-for-linux
+-teamspeak3
+-teeworlds
+-telegram
+-telegram-desktop
+-telnet
+-terasology
+-termshark
+-tesseract
+-textmaker18
+-textmaker18free
+-textroom
+-thunderbird
+-thunderbird-beta
+-thunderbird-wayland
+-tidal-hifi
+-tilp
+-tiny-rdm
+-tor-browser
+-tor-browser-ar
+-tor-browser-ca
+-tor-browser-cs
+-tor-browser-da
+-tor-browser-de
+-tor-browser-el
+-tor-browser-en
+-tor-browser-en-us
+-tor-browser-es
+-tor-browser-es-es
+-tor-browser-fa
+-tor-browser-fr
+-tor-browser-ga-ie
+-tor-browser-he
+-tor-browser-hu
+-tor-browser-id
+-tor-browser-is
+-tor-browser-it
+-tor-browser-ja
+-tor-browser-ka
+-tor-browser-ko
+-tor-browser-nb
+-tor-browser-nl
+-tor-browser-pl
+-tor-browser-pt-br
+-tor-browser-ru
+-tor-browser-sv-se
+-tor-browser-tr
+-tor-browser-vi
+-tor-browser-zh-cn
+-tor-browser-zh-tw
+-torbrowser
+-torbrowser-launcher
+-torcs
+-totem
+-tqemu
+-tracker
+-transgui
+-transmission-cli
+-transmission-create
+-transmission-daemon
+-transmission-edit
+-transmission-gtk
+-transmission-qt
+-transmission-remote
+-transmission-remote-cli
+-transmission-remote-gtk
+-transmission-show
+-tremulous
+-trojita
+-truecraft
+-tshark
+-tuir
+-tutanota-desktop
+-tuxguitar
+-tuxtype
+-tvbrowser
+-tvnamer
+-twitch
+-typespeed
+-udiskie
+-uefitool
+-uget-gtk
+-unbound
+-unf
+-unknown-horizons
+-#unlz4 # disable until we fix CLI archivers for makepkg on Arch (see discussion in #3095)
+-#unzstd # disable until we fix CLI archivers for makepkg on Arch (see discussion in #3095)
+-url-eater
+-utox
+-uudeview
+-uzbl-browser
+-uzdoom
+-vesktop
+-viewnior
+-viking
+-virtualbox
+-vivaldi
+-vivaldi-beta
+-vivaldi-snapshot
+-vivaldi-stable
+-vlc
+-#vmplayer # unable to install kernel modules (see #5861)
+-#vmware # unable to install kernel modules (see #5861)
+-#vmware-player # unable to install kernel modules (see #5861)
+-#vmware-workstation # unable to install kernel modules (see #5861)
+-vscodium
+-vulturesclaw
+-vultureseye
+-vym
+-w3m
+-warmux
+-warsow
+-warzone2100
+-warzone2100.real # since Debian 13, warzone2100 is a shell script executing warzone2100.real
+-waterfox
+-waterfox-classic
+-waterfox-current
+-webstorm
+-weechat
+-weechat-curses
+-wesnoth
+-wget
+-wget2
+-whalebird
+-whois
+-widelands
+-wine
+-wire-desktop
+-wireshark
+-wireshark-gtk
+-wireshark-qt
+-wordwarvi
+-wpp
+-wps
+-wpspdf
+-x2goclient
+-xbill
+-xcalc
+-xchat
+-#xed # text editor (see Note2)
+-xfburn
+-xfce4-dict
+-xfce4-mixer
+-xfce4-notes
+-xfce4-screenshooter
+-xiphos
+-xlinks
+-xlinks2
+-xmms
+-xmr-stak
+-xonotic
+-xonotic-glx
+-xonotic-sdl
+-xournal
+-xournalpp
+-xpdf
+-xplayer
+-xplayer-audio-preview
+-xplayer-video-thumbnailer
+-xpra
+-xreader
+-xreader-previewer
+-xreader-thumbnailer
+-xviewer
+-yandex-browser
+-yelp
+-youtube
+-youtube-dl
+-youtube-dl-gui
+-youtube-music-desktop-app
+-youtube-viewer
+-youtube-viewer-gtk
+-youtubemusic-nativefier
+-yt-dlp
+-ytmdesktop
+-zaproxy
+-zart
+-zathura
+-zeal
+-zen
+-zen-bin
+-zen-browser
+-zim
+-zlib-flate
+-zoom
+-#zpaq # disable until we fix CLI archivers for makepkg on Arch (see discussion in #3095)
+-#zstd # disable until we fix CLI archivers for makepkg on Arch (see discussion in #3095)
+-#zstdcat # disable until we fix CLI archivers for makepkg on Arch (see discussion in #3095)
+-#zstdgrep # disable until we fix CLI archivers for makepkg on Arch (see discussion in #3095)
+-#zstdless # disable until we fix CLI archivers for makepkg on Arch (see discussion in #3095)
+-#zstdmt # disable until we fix CLI archivers for makepkg on Arch (see discussion in #3095)
+-zulip
+diff -ruN '--exclude=config.log' '--exclude=config.mk' '--exclude=config.sh' '--exclude=config.status' '--exclude=*.o' '--exclude=*.d' '--exclude=firejail-0.9.80.tar.xz' firejail-0.9.80/src/firecfg/firecfg.h package-cli-only/firejail-0.9.80-cli-only/src/firecfg/firecfg.h
+--- firejail-0.9.80/src/firecfg/firecfg.h	2026-03-12 12:51:18.000000000 +0000
++++ package-cli-only/firejail-0.9.80-cli-only/src/firecfg/firecfg.h	1970-01-01 00:00:00.000000000 +0000
+@@ -1,67 +0,0 @@
+-/*
+- * Copyright (C) 2014-2026 Firejail Authors
+- *
+- * This file is part of firejail project
+- *
+- * This program is free software; you can redistribute it and/or modify
+- * it under the terms of the GNU General Public License as published by
+- * the Free Software Foundation; either version 2 of the License, or
+- * (at your option) any later version.
+- *
+- * This program is distributed in the hope that it will be useful,
+- * but WITHOUT ANY WARRANTY; without even the implied warranty of
+- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+- * GNU General Public License for more details.
+- *
+- * You should have received a copy of the GNU General Public License along
+- * with this program; if not, write to the Free Software Foundation, Inc.,
+- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+-*/
+-#ifndef FIRECFG_H
+-#define FIRECFG_H
+-#define _GNU_SOURCE
+-#include <stdio.h>
+-#include <sys/types.h>
+-#include <dirent.h>
+-#include <sys/types.h>
+-#include <sys/stat.h>
+-#include <fcntl.h>
+-#include <unistd.h>
+-#include <grp.h>
+-#include <string.h>
+-#include <errno.h>
+-#include <sys/mman.h>
+-#include <pwd.h>
+-#include <dirent.h>
+-
+-#include "../include/common.h"
+-#define MAX_BUF 4096
+-
+-// config files
+-#define FIRECFG_CFGFILE SYSCONFDIR "/firecfg.config"
+-#define FIRECFG_CONF_GLOB SYSCONFDIR "/firecfg.d/*.conf"
+-
+-// programs
+-#define FIREJAIL_EXEC PREFIX "/bin/firejail"
+-#define FIREJAIL_WELCOME_SH LIBDIR "/firejail/firejail-welcome.sh"
+-#define FZENITY_EXEC        LIBDIR "/firejail/fzenity"
+-#define ZENITY_EXEC "/usr/bin/zenity"
+-#define SUDO_EXEC "sudo"
+-
+-// main.c
+-extern int arg_debug;
+-int in_ignorelist(const char *const str);
+-void parse_config_all(int do_symlink);
+-
+-// util.c
+-int find(const char *program, const char *directory);
+-int which(const char *program);
+-int is_link(const char *fname);
+-
+-// sound.c
+-void sound(void);
+-
+-// desktop_files.c
+-void fix_desktop_files(const char *homedir);
+-
+-#endif
+diff -ruN '--exclude=config.log' '--exclude=config.mk' '--exclude=config.sh' '--exclude=config.status' '--exclude=*.o' '--exclude=*.d' '--exclude=firejail-0.9.80.tar.xz' firejail-0.9.80/src/firecfg/firejail-welcome.sh package-cli-only/firejail-0.9.80-cli-only/src/firecfg/firejail-welcome.sh
+--- firejail-0.9.80/src/firecfg/firejail-welcome.sh	2026-03-12 12:51:18.000000000 +0000
++++ package-cli-only/firejail-0.9.80-cli-only/src/firecfg/firejail-welcome.sh	1970-01-01 00:00:00.000000000 +0000
+@@ -1,204 +0,0 @@
+-#!/bin/bash
+-
+-# This file is part of Firejail project
+-# Copyright (C) 2014-2026 Firejail Authors
+-# License GPL v2
+-#
+-# Usage: firejail-welcome PROGRAM SYSCONFDIR USER_NAME
+-# where PROGRAM is detected and driven by firecfg.
+-# SYSCONFDIR is most of the time /etc/firejail.
+-#
+-# The plan is to go with zenity by default. If zenity is not installed
+-# we will provide a console-only replacement in /usr/lib/firejail/fzenity
+-#
+-
+-if ! command -v "$1" >/dev/null; then
+-	echo "Please install $1."
+-	exit 1
+-fi
+-
+-PROGRAM="sudo -u $3 $1"
+-SYSCONFDIR=$2
+-export LANG=en_US.UTF8
+-
+-TITLE="Firejail Configuration Guide"
+-sed_scripts=()
+-run_firecfg=false
+-enable_u2f=false
+-enable_drm=false
+-enable_seccomp_kill=false
+-enable_restricted_net=false
+-enable_nonewprivs=false
+-
+-#******************************************************
+-# Intro
+-#******************************************************
+-read -r -d $'\0' MSG_INTRO <<EOM
+-<big><b>Welcome to Firejail!</b></big>
+-
+-This guide will walk you through some of the most common sandbox customizations.
+-At the end of the guide you'll have the option to save your changes in Firejail's
+-global config file at <b>/etc/firejail/firejail.config</b>. A copy of the original file is saved
+-as <b>/etc/firejal/firejail.config-</b>.
+-
+-Please note that running this script a second time can set new options, but does
+-not clear options set in a previous run.
+-
+-Press OK to continue, or close this window to stop the program.
+-
+-EOM
+-$PROGRAM --title="$TITLE" --info --width=600 --height=40 --text="$MSG_INTRO"
+-[[ $? -eq 1 ]] && exit 0
+-
+-#******************************************************
+-# symlinks
+-#******************************************************
+-read -r -d $'\0' MSG_Q_RUN_FIRECFG <<EOM
+-<big><b>Should most programs be sandboxed by default?</b></big>
+-
+-Currently, Firejail recognizes more than 1000 regular desktop programs. These programs
+-can be sandboxed automatically when you start them.
+-
+-EOM
+-
+-if $PROGRAM --title="$TITLE" --question --ellipsize --text="$MSG_Q_RUN_FIRECFG"; then
+-	run_firecfg=true
+-fi
+-
+-#******************************************************
+-# U2F
+-#******************************************************
+-read -r -d $'\0' MSG_Q_BROWSER_DISABLE_U2F <<EOM
+-<big><b>Should browsers be allowed to access u2f hardware?</b></big>
+-
+-Universal Two-Factor (U2F) devices are used as a password store for online
+-accounts. These devices usually come in a form of a USB key.
+-
+-EOM
+-
+-if $PROGRAM --title="$TITLE" --question --ellipsize --text="$MSG_Q_BROWSER_DISABLE_U2F"; then
+-	enable_u2f=true
+-	sed_scripts+=("-e s/# browser-disable-u2f yes/browser-disable-u2f no/")
+-fi
+-
+-#******************************************************
+-# DRM
+-#******************************************************
+-read -r -d $'\0' MSG_Q_BROWSER_ALLOW_DRM <<EOM
+-<big><b>Should browsers be able to play DRM content?</b></big>
+-
+-The home directory is <tt>noexec,nodev,nosuid</tt> by default for most applications.
+-This means that executing programs located in your home directory is forbidden.
+-
+-Browsers install proprietary DRM plug-ins such as Widevine in your home directory.
+-In order to use them, your home must be mounted <tt>exec</tt> inside the sandbox. This
+-may give the people developing and distributing the plug-in access to your private
+-data.
+-
+-NOTE: Software written in an interpreted language such as bash, python or java can
+-always be started from home directory.
+-
+-HINT: If <tt>/home</tt> has its own partition, you can mount it <tt>nodev,nosuid</tt> for all programs.
+-
+-EOM
+-
+-if $PROGRAM --title="$TITLE" --question --ellipsize --text="$MSG_Q_BROWSER_ALLOW_DRM"; then
+-	enable_drm=true
+-	sed_scripts+=("-e s/# browser-allow-drm no/browser-allow-drm yes/")
+-fi
+-
+-#******************************************************
+-# nonewprivs
+-#******************************************************
+-read -r -d $'\0' MSG_Q_NONEWPRIVS <<EOM
+-<big><b>Should we force nonewprivs by default?</b></big>
+-
+-nonewprivs is a Linux kernel feature that prevents programs from rising privileges.
+-It is also a strong mitigation against exploits in Firejail. However, some programs
+-like chromium, wireshark, or even ping might not work.
+-
+-NOTE: seccomp enables nonewprivs automatically. Most applications supported by
+-default by Firejail are using seccomp.
+-
+-EOM
+-
+-if $PROGRAM --title="$TITLE" --question --ellipsize --text="$MSG_Q_NONEWPRIVS"; then
+-	enable_nonewprivs=true
+-	sed_scripts+=("-e s/# force-nonewprivs no/force-nonewprivs yes/")
+-fi
+-
+-#******************************************************
+-# restricted network
+-#******************************************************
+-read -r -d $'\0' MSG_Q_NETWORK <<EOM
+-<big><b>Should we restrict network functionality?</b></big>
+-
+-Restrict all network related commands except '<tt>net none</tt>' to root only.
+-
+-EOM
+-
+-if $PROGRAM --title="$TITLE" --question --ellipsize --text="$MSG_Q_NETWORK"; then
+-	enable_restricted_net=true
+-	sed_scripts+=("-e s/# restricted-network no/restricted-network yes/")
+-fi
+-
+-#******************************************************
+-# seccomp kill
+-#******************************************************
+-read -r -d $'\0' MSG_Q_SECCOMP <<EOM
+-<big><b>Should we kill programs that violate seccomp rules?</b></big>
+-
+-By default seccomp prevents the program from running the syscall and returns an error.
+-
+-EOM
+-
+-if $PROGRAM --title="$TITLE" --question --ellipsize --text="$MSG_Q_SECCOMP"; then
+-	enable_seccomp_kill=true
+-	sed_scripts+=("-e s/# seccomp-error-action EPERM/seccomp-error-action kill/")
+-fi
+-
+-#******************************************************
+-# root
+-#******************************************************
+-read -r -d $'\0' MSG_RUN <<EOM
+-Now, I will apply the changes. This is what I will do:
+-
+-
+-EOM
+-MSG_RUN+="\n\n"
+-if [[ "$run_firecfg" == "true" ]]; then
+-	MSG_RUN+="     * enable Firejail for all recognized programs\n"
+-fi
+-if [[ "$enable_u2f" == "true" ]]; then
+-	MSG_RUN+="     * allow browsers to access U2F devices\n"
+-fi
+-if [[ "$enable_drm" == "true" ]]; then
+-	MSG_RUN+="     * allow browsers to play DRM content\n"
+-fi
+-if [[ "$enable_nonewprivs" == "true" ]]; then
+-	MSG_RUN+="     * enable nonewprivs globally\n"
+-fi
+-if [[ "$enable_restricted_net" == "true" ]]; then
+-	MSG_RUN+="     * restrict networking features\n"
+-fi
+-if [[ "$enable_seccomp_kill" == "true" ]]; then
+-	MSG_RUN+="     * enable seccomp kill\n"
+-fi
+-MSG_RUN+="\n\nPress OK to continue, or close this window to stop the program."
+-
+-$PROGRAM --title="$TITLE" --info --width=600 --height=40 --text="$MSG_RUN"
+-[[ $? -eq 1 ]] && exit 0
+-
+-if [[ -n "${sed_scripts[*]}" ]]; then
+-	cp "$SYSCONFDIR"/firejail.config "$SYSCONFDIR"/firejail.config-
+-	sed -i "${sed_scripts[@]}" "$SYSCONFDIR"/firejail.config
+-fi
+-if [[ "$run_firecfg" == "true" ]]; then
+-	# return 55 to inform firecfg symlinks are desired
+-	exit 55
+-fi
+-
+-#******************************************************
+-# all done
+-#******************************************************
+-exit 0
+diff -ruN '--exclude=config.log' '--exclude=config.mk' '--exclude=config.sh' '--exclude=config.status' '--exclude=*.o' '--exclude=*.d' '--exclude=firejail-0.9.80.tar.xz' firejail-0.9.80/src/firecfg/main.c package-cli-only/firejail-0.9.80-cli-only/src/firecfg/main.c
+--- firejail-0.9.80/src/firecfg/main.c	2026-03-12 12:51:18.000000000 +0000
++++ package-cli-only/firejail-0.9.80-cli-only/src/firecfg/main.c	1970-01-01 00:00:00.000000000 +0000
+@@ -1,616 +0,0 @@
+-/*
+- * Copyright (C) 2014-2026 Firejail Authors
+- *
+- * This file is part of firejail project
+- *
+- * This program is free software; you can redistribute it and/or modify
+- * it under the terms of the GNU General Public License as published by
+- * the Free Software Foundation; either version 2 of the License, or
+- * (at your option) any later version.
+- *
+- * This program is distributed in the hope that it will be useful,
+- * but WITHOUT ANY WARRANTY; without even the implied warranty of
+- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+- * GNU General Public License for more details.
+- *
+- * You should have received a copy of the GNU General Public License along
+- * with this program; if not, write to the Free Software Foundation, Inc.,
+- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+-*/
+-
+-#include "firecfg.h"
+-#include "../include/firejail_user.h"
+-#include <glob.h>
+-
+-int arg_debug = 0;
+-char *arg_bindir = "/usr/local/bin";
+-int arg_guide = 0;
+-int done_config = 0;
+-
+-static const char *const usage_str =
+-	"Firecfg is the desktop configuration utility for Firejail software. The utility\n"
+-	"creates several symbolic links to firejail executable. This allows the user to\n"
+-	"sandbox applications automatically, just by clicking on a regular desktop\n"
+-	"menus and icons.\n\n"
+-	"The symbolic links are placed in /usr/local/bin. For more information, see\n"
+-	"DESKTOP INTEGRATION section in man 1 firejail.\n\n"
+-	"Usage: firecfg [OPTIONS]\n\n"
+-	"   --add-users user [user] - add the users to Firejail user access database.\n\n"
+-	"   --bindir=directory - install in directory instead of /usr/local/bin.\n\n"
+-	"   --clean - remove all firejail symbolic links.\n\n"
+-	"   --debug - print debug messages.\n\n"
+-	"   --fix - fix .desktop files.\n\n"
+-	"   --fix-sound - create ~/.config/pulse/client.conf file.\n\n"
+-	"   --guide - guided configuration for new users.\n\n"
+-	"   --help, -? - this help screen.\n\n"
+-	"   --list - list all firejail symbolic links.\n\n"
+-	"   --version - print program version and exit.\n\n"
+-	"Example:\n\n"
+-	"   $ sudo firecfg\n"
+-	"   /usr/local/bin/firefox created\n"
+-	"   /usr/local/bin/vlc created\n"
+-	"   [...]\n"
+-	"   $ firecfg --list\n"
+-	"   /usr/local/bin/firefox\n"
+-	"   /usr/local/bin/vlc\n"
+-	"   [...]\n"
+-	"   $ sudo firecfg --clean\n"
+-	"   /usr/local/bin/firefox removed\n"
+-	"   /usr/local/bin/vlc removed\n"
+-	"   [...]\n"
+-	"\n"
+-	"License GPL version 2 or later\n"
+-	"Homepage: https://firejail.wordpress.com\n";
+-
+-static void print_version(void) {
+-	printf("firecfg version %s\n\n", VERSION);
+-}
+-
+-static void usage(void) {
+-	print_version();
+-	puts(usage_str);
+-}
+-
+-static void list(void) {
+-	DIR *dir = opendir(arg_bindir);
+-	if (!dir) {
+-		perror("opendir");
+-		fprintf(stderr, "Error: cannot open %s directory\n", arg_bindir);
+-		exit(1);
+-	}
+-
+-	struct dirent *entry;
+-	while ((entry = readdir(dir)) != NULL) {
+-		if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+-			continue;
+-
+-		char *fullname;
+-		if (asprintf(&fullname, "%s/%s", arg_bindir, entry->d_name) == -1)
+-			errExit("asprintf");
+-
+-		if (is_link(fullname)) {
+-			char* fname = realpath(fullname, NULL);
+-			if (fname) {
+-				if (strcmp(fname, FIREJAIL_EXEC) == 0)
+-					printf("%s\n", fullname);
+-				free(fname);
+-			}
+-		}
+-		free(fullname);
+-	}
+-
+-	closedir(dir);
+-}
+-
+-static void clean(void) {
+-	printf("Removing all firejail symlinks from /usr/local/bin\n");
+-
+-	DIR *dir = opendir(arg_bindir);
+-	if (!dir) {
+-		perror("opendir");
+-		fprintf(stderr, "Error: cannot open %s directory\n", arg_bindir);
+-		exit(1);
+-	}
+-
+-	struct dirent *entry;
+-	while ((entry = readdir(dir)) != NULL) {
+-		if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+-			continue;
+-
+-		char *fullname;
+-		if (asprintf(&fullname, "%s/%s", arg_bindir, entry->d_name) == -1)
+-			errExit("asprintf");
+-
+-		if (is_link(fullname)) {
+-			char* fname = realpath(fullname, NULL);
+-			if (fname) {
+-				if (strcmp(fname, FIREJAIL_EXEC) == 0) {
+-					char *ptr = strrchr(fullname, '/');
+-					assert(ptr);
+-					ptr++;
+-					int rv = unlink(fullname);
+-					if (rv)
+-						fprintf(stderr, "Warning: cannot remove %s\n", fullname);
+-					else if (arg_debug)
+-						printf("   %s removed\n", ptr);
+-				}
+-				free(fname);
+-			}
+-		}
+-		free(fullname);
+-	}
+-
+-	closedir(dir);
+-	printf("\n");
+-}
+-
+-#define ignorelist_maxlen 2048
+-static const char *ignorelist[ignorelist_maxlen];
+-static int ignorelist_len = 0;
+-
+-static int append_ignorelist(const char *const str) {
+-	assert(str);
+-	if (ignorelist_len >= ignorelist_maxlen) {
+-		fprintf(stderr, "Warning: Ignore list is full (%d/%d), skipping %s\n",
+-			ignorelist_len, ignorelist_maxlen, str);
+-		return 0;
+-	}
+-
+-	printf("   ignoring '%s'\n", str);
+-	const char *const dup = strdup(str);
+-	if (!dup)
+-		errExit("strdup");
+-
+-	ignorelist[ignorelist_len] = dup;
+-	ignorelist_len++;
+-
+-	return 1;
+-}
+-
+-int in_ignorelist(const char *const str) {
+-	assert(str);
+-	int i;
+-	for (i = 0; i < ignorelist_len; i++) {
+-		if (strcmp(str, ignorelist[i]) == 0)
+-			return 1;
+-	}
+-
+-	return 0;
+-}
+-
+-static void set_file(const char *name, const char *firejail_exec) {
+-	assert(name);
+-	assert(firejail_exec);
+-
+-	if (which(name) == 0)
+-		return;
+-
+-	// if the application is a snap (Ubuntu), don't link it!
+-	if (find(name, "/snap")) {
+-		printf("   %s is a snap package, skipping...\n", name);
+-		return;
+-	}
+-
+-	char *fname;
+-	if (asprintf(&fname, "%s/%s", arg_bindir, name) == -1)
+-		errExit("asprintf");
+-
+-	struct stat s;
+-	if (stat(fname, &s) != 0) {
+-		int rv = symlink(firejail_exec, fname);
+-		if (rv) {
+-			fprintf(stderr, "Error: cannot create %s symbolic link\n", fname);
+-			perror("symlink");
+-		} else {
+-			printf("   %s created\n", name);
+-		}
+-	} else {
+-		fprintf(stderr, "   %s already exists, skipping...\n", fname);
+-	}
+-
+-	free(fname);
+-}
+-
+-// parse a single config file
+-static void parse_config_file(const char *cfgfile, int do_symlink) {
+-	if (do_symlink)
+-		printf("\nConfiguring symlinks in %s\n", arg_bindir);
+-
+-	printf("Parsing %s\n", cfgfile);
+-
+-	FILE *fp = fopen(cfgfile, "r");
+-	if (!fp) {
+-		perror("fopen");
+-		fprintf(stderr, "Error: cannot open %s\n", cfgfile);
+-		exit(1);
+-	}
+-
+-	char buf[MAX_BUF];
+-	int lineno = 0;
+-	while (fgets(buf, MAX_BUF,fp)) {
+-		lineno++;
+-
+-		// remove comments
+-		if (*buf == '#') // comments
+-			continue;
+-		char *ptr = strchr(buf, '#');
+-		if (ptr)
+-			*ptr = '\0';
+-
+-		// remove \n blanks, tabs ...
+-		ptr = strchr(buf, '\n');
+-		if (ptr)
+-			*ptr = '\0';
+-		int i;
+-		for (i = strlen(buf) -1; i >= 0; i--) {
+-			if (buf[i] == ' ' || buf[i] == '\t')
+-				buf[i] = '\0';
+-			else
+-				break;
+-		}
+-		if (*buf == '\0')
+-			continue;
+-
+-		// trim spaces
+-		ptr = buf;
+-		while (*ptr == ' ' || *ptr == '\t')
+-			ptr++;
+-		char *start = ptr;
+-
+-		// empty line
+-		if (*start == '\0')
+-			continue;
+-
+-		// do not accept .. and/or / in file name
+-		if (strstr(buf, "..") || strchr(buf, '/')) {
+-			fprintf(stderr, "Error: invalid line %d in %s\n", lineno, cfgfile);
+-			exit(1);
+-		}
+-
+-		// handle ignore command
+-		if (*start == '!') {
+-			append_ignorelist(start + 1);
+-			continue;
+-		}
+-
+-		// skip ignored programs
+-		if (in_ignorelist(start)) {
+-			printf("   %s ignored\n", start);
+-			continue;
+-		}
+-
+-		// set link
+-		if (do_symlink)
+-			set_file(start, FIREJAIL_EXEC);
+-	}
+-
+-	fclose(fp);
+-	printf("\n");
+-}
+-
+-// parse all config files matching pattern
+-static void parse_config_glob(const char *pattern, int do_symlink) {
+-	printf("Looking for config files in %s\n", pattern);
+-
+-	glob_t globbuf;
+-	int globerr = glob(pattern, 0, NULL, &globbuf);
+-	if (globerr == GLOB_NOMATCH) {
+-		if (arg_debug)
+-			fprintf(stderr, "No matches for glob pattern %s\n", pattern);
+-		goto out;
+-	} else if (globerr != 0) {
+-		fprintf(stderr, "Warning: Failed to match glob pattern %s: %s\n",
+-		        pattern, strerror(errno));
+-		goto out;
+-	}
+-
+-	size_t i;
+-	for (i = 0; i < globbuf.gl_pathc; i++)
+-		parse_config_file(globbuf.gl_pathv[i], do_symlink);
+-out:
+-	globfree(&globbuf);
+-}
+-
+-// parse all config files
+-// do_symlink 0 just builds the ignorelist, 1 creates the symlinks
+-void parse_config_all(int do_symlink) {
+-	if (done_config)
+-		return;
+-
+-	parse_config_glob(FIRECFG_CONF_GLOB, do_symlink);
+-	parse_config_file(FIRECFG_CFGFILE, do_symlink);
+-
+-	done_config = 1;
+-}
+-
+-// parse ~/.config/firejail/ directory
+-static void set_links_homedir(const char *homedir) {
+-	assert(homedir);
+-
+-	// check firejail config directory
+-	char *dirname;
+-	if (asprintf(&dirname, "%s/.config/firejail", homedir) == -1)
+-		errExit("asprintf");
+-	struct stat s;
+-	if (stat(dirname, &s) != 0) {
+-		free(dirname);
+-		return;
+-	}
+-
+-	// parse ~/.config/firejail/ directory
+-	printf("\nConfiguring symlinks in %s based on local firejail config directory\n", arg_bindir);
+-
+-	DIR *dir = opendir(dirname);
+-	if (!dir) {
+-		perror("opendir");
+-		fprintf(stderr, "Error: cannot open %s directory\n", dirname);
+-		free(dirname);
+-		return;
+-	}
+-	free(dirname);
+-
+-	struct dirent *entry;
+-	while ((entry = readdir(dir))) {
+-		if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0)
+-			continue;
+-
+-		char *exec = strdup(entry->d_name);
+-		if (!exec)
+-			errExit("strdup");
+-		char *ptr = strrchr(exec, '.');
+-		if (!ptr)
+-			goto next;
+-		if (strcmp(ptr, ".profile") != 0)
+-			goto next;
+-
+-		*ptr = '\0';
+-		if (in_ignorelist(exec)) {
+-			printf("   %s ignored\n", exec);
+-			goto next;
+-		}
+-
+-		set_file(exec, FIREJAIL_EXEC);
+-next:
+-		free(exec);
+-	}
+-	closedir(dir);
+-}
+-
+-static const char *get_sudo_user(void) {
+-	const char *doas_user = getenv("DOAS_USER");
+-	const char *sudo_user = getenv("SUDO_USER");
+-	const char *user = doas_user ? doas_user : sudo_user;
+-
+-	if (!user) {
+-		user = getpwuid(getuid())->pw_name;
+-		if (!user) {
+-			fprintf(stderr, "Error: cannot detect login user\n");
+-			exit(1);
+-		}
+-	}
+-
+-	return user;
+-}
+-
+-static const char *get_homedir(const char *user, uid_t *uid, gid_t *gid) {
+-	// find home directory
+-	struct passwd *pw = getpwnam(user);
+-	if (!pw)
+-		goto errexit;
+-
+-	const char *home = pw->pw_dir;
+-	if (!home)
+-		goto errexit;
+-
+-	*uid = pw->pw_uid;
+-	*gid = pw->pw_gid;
+-
+-	return home;
+-
+-errexit:
+-	fprintf(stderr, "Error: cannot find home directory for user %s\n", user);
+-	exit(1);
+-}
+-
+-int main(int argc, char **argv) {
+-	int i;
+-	int bindir_set = 0;
+-
+-	// user setup
+-	const char *user = get_sudo_user();
+-	assert(user);
+-	uid_t uid;
+-	gid_t gid;
+-	const char *home = get_homedir(user, &uid, &gid);
+-
+-	// check for --bindir
+-	for (i = 1; i < argc; i++) {
+-		if (strncmp(argv[i], "--bindir=", 9) == 0) {
+-			if (strncmp(argv[i] + 9, "~/", 2) == 0) {
+-				if (asprintf(&arg_bindir, "%s/%s", home, argv[i] + 11) == -1)
+-					errExit("asprintf");
+-			}
+-			else
+-				arg_bindir = argv[i] + 9;
+-			bindir_set = 1;
+-
+-			// exit if the directory does not exist, or if we don't have access to it
+-			if (access(arg_bindir, R_OK | W_OK | X_OK)) {
+-				if (errno == EACCES)
+-					fprintf(stderr, "Error: firecfg needs full permissions on directory %s\n", arg_bindir);
+-				else {
+-					perror("access");
+-					fprintf(stderr, "Error: cannot access directory %s\n", arg_bindir);
+-				}
+-				exit(1);
+-			}
+-		}
+-	}
+-
+-	for (i = 1; i < argc; i++) {
+-		// default options
+-		if (strcmp(argv[i], "--help") == 0 ||
+-		    strcmp(argv[i], "-?") == 0) {
+-			usage();
+-			return 0;
+-		}
+-		else if (strcmp(argv[i], "--debug") == 0)
+-			arg_debug = 1;
+-		else if (strcmp(argv[i], "--version") == 0) {
+-			print_version();
+-			return 0;
+-		}
+-		else if (strcmp(argv[i], "--clean") == 0) {
+-			clean();
+-			return 0;
+-		}
+-		else if (strcmp(argv[i], "--fix") == 0) {
+-			fix_desktop_files(home);
+-			return 0;
+-		}
+-		else if (strcmp(argv[i], "--guide") == 0) {
+-			arg_guide = 1;
+-		}
+-		else if (strcmp(argv[i], "--list") == 0) {
+-			list();
+-			return 0;
+-		}
+-		else if (strcmp(argv[i], "--fix-sound") == 0) {
+-			sound();
+-			return 0;
+-		}
+-		else if (strcmp(argv[i], "--add-users") == 0) {
+-			int j;
+-			if (getuid() != 0) {
+-				fprintf(stderr, "Error: you need to be root to use this option\n");
+-				exit(1);
+-			}
+-
+-			// set umask, access database must be world-readable
+-			umask(022);
+-			for (j = i + 1; j < argc; j++) {
+-				printf("Adding user %s to Firejail access database in %s/firejail.users\n", argv[j], SYSCONFDIR);
+-				firejail_user_add(argv[j]);
+-			}
+-			return 0;
+-		}
+-		else {
+-			if (strncmp(argv[i], "--bindir=", 9) != 0) { // already handled
+-				fprintf(stderr, "Error: invalid command line option\n");
+-				usage();
+-				return 1;
+-			}
+-		}
+-	}
+-
+-	print_version();
+-	if (arg_debug)
+-		printf("%s %d %d %d %d\n", user, getuid(), getgid(), geteuid(), getegid());
+-
+-	// set symlinks in /usr/local/bin
+-	if (bindir_set == 0 && getuid() != 0) {
+-		fprintf(stderr, "Error: cannot set the symbolic links in %s\n", arg_bindir);
+-		fprintf(stderr, "The proper way to run this command is \"sudo firecfg\".\n");
+-		return 1;
+-	}
+-	else if (bindir_set == 0) {
+-		// create /usr/local directory if it doesn't exist (Solus distro)
+-		mode_t orig_umask = umask(022); // temporarily set the umask
+-		struct stat s;
+-		if (stat("/usr/local", &s) != 0) {
+-			printf("Creating /usr/local directory\n");
+-			int rv = mkdir("/usr/local", 0755);
+-			if (rv != 0) {
+-				fprintf(stderr, "Error: cannot create /usr/local directory\n");
+-				return 1;
+-			}
+-		}
+-		if (stat(arg_bindir, &s) != 0) {
+-			printf("Creating %s directory\n", arg_bindir);
+-			int rv = mkdir(arg_bindir, 0755);
+-			if (rv != 0) {
+-				fprintf(stderr, "Error: cannot create %s directory\n", arg_bindir);
+-				return 1;
+-			}
+-		}
+-		umask(orig_umask);
+-	}
+-
+-	if (arg_guide) {
+-		const char *zenity_exec;
+-		if (arg_debug)
+-			zenity_exec = FZENITY_EXEC;
+-		else
+-			zenity_exec = ZENITY_EXEC;
+-
+-		char *cmd;
+-		if (asprintf(&cmd, "%s %s %s %s %s",
+-			     SUDO_EXEC, FIREJAIL_WELCOME_SH, zenity_exec, SYSCONFDIR, user) == -1)
+-			errExit("asprintf");
+-
+-		int status = system(cmd);
+-		if (status == -1) {
+-			fprintf(stderr, "Error: cannot run %s\n", FIREJAIL_WELCOME_SH);
+-			exit(1);
+-		}
+-		free(cmd);
+-
+-		// the last 8 bits of the status is the return value of the command executed by system()
+-		// firejail-welcome.sh returns 55 if setting sysmlinks is required
+-		if (WEXITSTATUS(status)  != 55)
+-			return 0;
+-	}
+-
+-	// clear all symlinks
+-	clean();
+-
+-	// set new symlinks based on config files
+-	parse_config_all(1);
+-
+-	if (getuid() == 0) {
+-		// add user to firejail access database - only for root
+-		printf("Adding user %s to Firejail access database in %s/firejail.users\n", user, SYSCONFDIR);
+-		// temporarily set the umask, access database must be world-readable
+-		mode_t orig_umask = umask(022);
+-		firejail_user_add(user);
+-		umask(orig_umask);
+-
+-#ifdef HAVE_APPARMOR
+-		// enable firejail apparmor profile
+-		struct stat s;
+-		if (stat("/sbin/apparmor_parser", &s) == 0) {
+-			char *cmd;
+-
+-			// SYSCONFDIR points to /etc/firejail, we have to go on level up (..)
+-			printf("\nLoading AppArmor profile\n");
+-			if (asprintf(&cmd, "/sbin/apparmor_parser -r /etc/apparmor.d/firejail-default %s/../apparmor.d/firejail-default", SYSCONFDIR) == -1)
+-				errExit("asprintf");
+-			int rv = system(cmd);
+-			(void) rv;
+-			free(cmd);
+-		}
+-#endif
+-	}
+-
+-	// set new symlinks based on ~/.config/firejail directory
+-	set_links_homedir(home);
+-
+-	// drop permissions
+-	if (getuid() == 0) {
+-		if (setgroups(0, NULL) < 0)
+-			errExit("setgroups");
+-		if (setgid(gid) < 0)
+-			errExit("setgid");
+-		if (setuid(uid) < 0)
+-			errExit("setuid");
+-	}
+-
+-	if (arg_debug)
+-		printf("%s %d %d %d %d\n", user, getuid(), getgid(), geteuid(), getegid());
+-
+-	// if runs as regular user, fix .desktop files in ~/.local/share/applications directory
+-	if (getuid() != 0)
+-		fix_desktop_files(home);
+-
+-	return 0;
+-}
+diff -ruN '--exclude=config.log' '--exclude=config.mk' '--exclude=config.sh' '--exclude=config.status' '--exclude=*.o' '--exclude=*.d' '--exclude=firejail-0.9.80.tar.xz' firejail-0.9.80/src/firecfg/sound.c package-cli-only/firejail-0.9.80-cli-only/src/firecfg/sound.c
+--- firejail-0.9.80/src/firecfg/sound.c	2026-03-12 12:51:18.000000000 +0000
++++ package-cli-only/firejail-0.9.80-cli-only/src/firecfg/sound.c	1970-01-01 00:00:00.000000000 +0000
+@@ -1,67 +0,0 @@
+-/*
+- * Copyright (C) 2014-2026 Firejail Authors
+- *
+- * This file is part of firejail project
+- *
+- * This program is free software; you can redistribute it and/or modify
+- * it under the terms of the GNU General Public License as published by
+- * the Free Software Foundation; either version 2 of the License, or
+- * (at your option) any later version.
+- *
+- * This program is distributed in the hope that it will be useful,
+- * but WITHOUT ANY WARRANTY; without even the implied warranty of
+- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+- * GNU General Public License for more details.
+- *
+- * You should have received a copy of the GNU General Public License along
+- * with this program; if not, write to the Free Software Foundation, Inc.,
+- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+-*/
+-
+-#include "firecfg.h"
+-
+-void sound(void) {
+-	struct passwd *pw = getpwuid(getuid());
+-	if (!pw) {
+-		goto errexit;
+-	}
+-	char *home = pw->pw_dir;
+-	if (!home) {
+-		goto errexit;
+-	}
+-
+-	// the input file is /etc/pulse/client.conf
+-	FILE *fpin = fopen("/etc/pulse/client.conf", "r");
+-	if (!fpin) {
+-		fprintf(stderr, "PulseAudio is not available on this platform, there is nothing to fix...\n");
+-		return;
+-	}
+-
+-	// the dest is PulseAudio user config file
+-	char *fname;
+-	if (asprintf(&fname, "%s/.config/pulse/client.conf", home) == -1)
+-		errExit("asprintf");
+-	printf("Writing file %s\n", fname);
+-	FILE *fpout = fopen(fname, "w");
+-	if (!fpout) {
+-		perror("fopen");
+-		goto errexit;
+-	}
+-	free(fname);
+-
+-	// copy default config
+-	char buf[MAX_BUF];
+-	while (fgets(buf, MAX_BUF, fpin))
+-		fputs(buf, fpout);
+-
+-	// disable shm
+-	fprintf(fpout, "\nenable-shm = no\n");
+-	fclose(fpin);
+-	fclose(fpout);
+-	printf("PulseAudio configured, please logout and login back again\n");
+-	return;
+-
+-errexit:
+-	fprintf(stderr, "Error: cannot configure sound file\n");
+-	exit(1);
+-}
+diff -ruN '--exclude=config.log' '--exclude=config.mk' '--exclude=config.sh' '--exclude=config.status' '--exclude=*.o' '--exclude=*.d' '--exclude=firejail-0.9.80.tar.xz' firejail-0.9.80/src/firecfg/util.c package-cli-only/firejail-0.9.80-cli-only/src/firecfg/util.c
+--- firejail-0.9.80/src/firecfg/util.c	2026-03-12 12:51:18.000000000 +0000
++++ package-cli-only/firejail-0.9.80-cli-only/src/firecfg/util.c	1970-01-01 00:00:00.000000000 +0000
+@@ -1,92 +0,0 @@
+-/*
+- * Copyright (C) 2014-2026 Firejail Authors
+- *
+- * This file is part of firejail project
+- *
+- * This program is free software; you can redistribute it and/or modify
+- * it under the terms of the GNU General Public License as published by
+- * the Free Software Foundation; either version 2 of the License, or
+- * (at your option) any later version.
+- *
+- * This program is distributed in the hope that it will be useful,
+- * but WITHOUT ANY WARRANTY; without even the implied warranty of
+- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+- * GNU General Public License for more details.
+- *
+- * You should have received a copy of the GNU General Public License along
+- * with this program; if not, write to the Free Software Foundation, Inc.,
+- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+-*/
+-
+-#include "firecfg.h"
+-
+-// return 1 if the program is found
+-int find(const char *program, const char *directory) {
+-	int retval = 0;
+-
+-	char *fname;
+-	if (asprintf(&fname, "/%s/%s", directory, program) == -1)
+-		errExit("asprintf");
+-
+-	struct stat s;
+-	if (stat(fname, &s) == 0) {
+-		if (arg_debug)
+-			printf("found %s in directory %s\n", program, directory);
+-		retval = 1;
+-	}
+-
+-	free(fname);
+-	return retval;
+-}
+-
+-
+-// return 1 if program is installed on the system
+-int which(const char *program) {
+-	// check some well-known paths
+-	if (find(program, "/bin") || find(program, "/usr/bin") ||
+-	    find(program, "/sbin") || find(program, "/usr/sbin") ||
+-	    find(program, "/usr/games"))
+-		return 1;
+-
+-	// check environment
+-	char *path1 = getenv("PATH");
+-	if (path1) {
+-		char *path2 = strdup(path1);
+-		if (!path2)
+-			errExit("strdup");
+-
+-		// use path2 to count the entries
+-		char *ptr = strtok(path2, ":");
+-		while (ptr) {
+-			// Ubuntu 18.04 is adding  /snap/bin to PATH;
+-			// they populate /snap/bin with symbolic links to /usr/bin/ programs;
+-			// most symlinked programs are not installed by default.
+-			// Removing /snap/bin from our search
+-			if (strcmp(ptr, "/snap/bin") != 0) {
+-				if (find(program, ptr)) {
+-					free(path2);
+-					return 1;
+-				}
+-			}
+-			ptr = strtok(NULL, ":");
+-		}
+-		free(path2);
+-	}
+-
+-	return 0;
+-}
+-
+-// return 1 if the file is a link
+-int is_link(const char *fname) {
+-	assert(fname);
+-	if (*fname == '\0')
+-		return 0;
+-
+-	struct stat s;
+-	if (lstat(fname, &s) == 0) {
+-		if (S_ISLNK(s.st_mode))
+-			return 1;
+-	}
+-
+-	return 0;
+-}
+diff -ruN '--exclude=config.log' '--exclude=config.mk' '--exclude=config.sh' '--exclude=config.status' '--exclude=*.o' '--exclude=*.d' '--exclude=firejail-0.9.80.tar.xz' firejail-0.9.80/src/firejail/appimage.c package-cli-only/firejail-0.9.80-cli-only/src/firejail/appimage.c
+--- firejail-0.9.80/src/firejail/appimage.c	2026-03-12 12:51:18.000000000 +0000
++++ package-cli-only/firejail-0.9.80-cli-only/src/firejail/appimage.c	2026-07-24 15:58:32.000000000 +0000
+@@ -28,54 +28,79 @@
+ #include <fcntl.h>
+ #include <linux/loop.h>
+ #include <errno.h>
++#include <dirent.h>
+ 
+ static char *devloop = NULL;	// device file
+ static long unsigned size = 0;	// offset into appimage file
+-#define MAXBUF 4096
+-
+ static void err_loop(char *msg) {
+ 	fprintf(stderr, "%s\n", msg);
+ 	exit(1);
+ }
+ 
+-// return 1 if found
++#define PROFILE_SUFFIX ".profile"
++
++// Return the longest profile basename that is a case-insensitive prefix of
++// the AppImage filename. Example: kdenlive.profile matches
++// kdenlive-24.12.1-x86_64.AppImage.
++static char *appimage_profile_prefix(const char *archive_name, const char *directory) {
++	DIR *dir = opendir(directory);
++	if (!dir)
++		return NULL;
++
++	char *best = NULL;
++	size_t best_len = 0;
++	struct dirent *entry;
++	const size_t suffix_len = strlen(PROFILE_SUFFIX);
++	while ((entry = readdir(dir)) != NULL) {
++		const char *filename = entry->d_name;
++		size_t filename_len = strlen(filename);
++		if (filename_len <= suffix_len ||
++		    strcmp(filename + filename_len - suffix_len, PROFILE_SUFFIX) != 0)
++			continue;
++
++		size_t profile_len = filename_len - suffix_len;
++		if (profile_len <= best_len ||
++		    strncasecmp(archive_name, filename, profile_len) != 0)
++			continue;
++
++		char *candidate = strndup(filename, profile_len);
++		if (!candidate)
++			errExit("strndup");
++		free(best);
++		best = candidate;
++		best_len = profile_len;
++	}
++	closedir(dir);
++	return best;
++}
++
++// Return 1 if a matching profile is found and loaded.
+ int appimage_find_profile(const char *archive) {
+ 	assert(archive);
+ 	assert(strlen(archive));
+ 
+-	// extract the name of the appimage from a full path
+-	// example: archive = /opt/kdenlive-20.12.2-x86_64.appimage
+ 	const char *arc = strrchr(archive, '/');
+-	if (arc)
+-		arc++;
+-	else
+-		arc = archive;
++	arc = arc ? arc + 1 : archive;
+ 	if (arg_debug)
+-		printf("Looking for a %s profile\n", arc);
++		printf("Looking for a profile matching %s\n", arc);
+ 
+-	// try to match the name of the archive with the list of programs in /etc/firejail/firecfg.config
+-	FILE *fp = fopen(SYSCONFDIR "/firecfg.config", "r");
+-	if (!fp) {
+-		fprintf(stderr, "Error: cannot find %s, firejail is not correctly installed\n", SYSCONFDIR "/firecfg.config");
+-		exit(1);
+-	}
+-	char buf[MAXBUF];
+-	while (fgets(buf, MAXBUF, fp)) {
+-		if (*buf == '#')
+-			continue;
+-		char *ptr = strchr(buf, '\n');
+-		if (ptr)
+-			*ptr = '\0';
+-		char *found = strcasestr(arc, buf);
+-		if (found == arc) {
+-			fclose(fp);
+-			return profile_find_firejail(buf, 1);
+-		}
+-	}
+-
+-	fclose(fp);
+-	return 0;
++	char *user_profile_dir;
++	if (asprintf(&user_profile_dir, "%s/.config/firejail", cfg.homedir) == -1)
++		errExit("asprintf");
++
++	// User profiles have precedence over system profiles.
++	char *profile = appimage_profile_prefix(arc, user_profile_dir);
++	free(user_profile_dir);
++	if (!profile)
++		profile = appimage_profile_prefix(arc, SYSCONFDIR);
++	if (!profile)
++		return 0;
+ 
++	if (arg_debug)
++		printf("AppImage profile match: %s.profile\n", profile);
++	int rv = profile_find_firejail(profile, 1);
++	free(profile);
++	return rv;
+ }
+ 
+ 
+diff -ruN '--exclude=config.log' '--exclude=config.mk' '--exclude=config.sh' '--exclude=config.status' '--exclude=*.o' '--exclude=*.d' '--exclude=firejail-0.9.80.tar.xz' firejail-0.9.80/src/firejail/firejail.h package-cli-only/firejail-0.9.80-cli-only/src/firejail/firejail.h
+--- firejail-0.9.80/src/firejail/firejail.h	2026-03-12 12:51:18.000000000 +0000
++++ package-cli-only/firejail-0.9.80-cli-only/src/firejail/firejail.h	2026-07-24 15:57:12.000000000 +0000
+@@ -787,9 +787,6 @@
+ void fs_logger_change_owner(void);
+ void fs_logger_print_log(pid_t pid) __attribute__((noreturn));
+ 
+-// run_symlink.c
+-void run_symlink(int argc, char **argv, int run_as_is);
+-
+ // paths.c
+ char **build_paths(void);
+ unsigned int count_paths(void);
+diff -ruN '--exclude=config.log' '--exclude=config.mk' '--exclude=config.sh' '--exclude=config.status' '--exclude=*.o' '--exclude=*.d' '--exclude=firejail-0.9.80.tar.xz' firejail-0.9.80/src/firejail/fs_bin.c package-cli-only/firejail-0.9.80-cli-only/src/firejail/fs_bin.c
+--- firejail-0.9.80/src/firejail/fs_bin.c	2026-03-12 12:51:18.000000000 +0000
++++ package-cli-only/firejail-0.9.80-cli-only/src/firejail/fs_bin.c	2026-07-24 15:57:12.000000000 +0000
+@@ -61,7 +61,7 @@
+ 			printf("Checking %s/%s\n", paths[i], name);
+ 		if (stat(fname, &s) == 0 &&
+ 		    !S_ISDIR(s.st_mode) &&	// do not allow directories
+-		    !is_firejail_link(fname)) {	// skip symlinks to firejail executable, as created by firecfg
++		    !is_firejail_link(fname)) {	// skip links resolving back to Firejail
+ 			free(fname);
+ 			break; // file found
+ 		}
+@@ -242,7 +242,7 @@
+ 			// testing for GLOB_NOCHECK - no pattern matched returns the original pattern
+ 			if (strcmp(globbuf.gl_pathv[j], pattern) == 0)
+ 				continue;
+-			// skip symlinks to firejail executable, as created by firecfg
++			// skip links resolving back to Firejail
+ 			if (is_firejail_link(globbuf.gl_pathv[j]))
+ 				continue;
+ 
+diff -ruN '--exclude=config.log' '--exclude=config.mk' '--exclude=config.sh' '--exclude=config.status' '--exclude=*.o' '--exclude=*.d' '--exclude=firejail-0.9.80.tar.xz' firejail-0.9.80/src/firejail/fs_lib.c package-cli-only/firejail-0.9.80-cli-only/src/firejail/fs_lib.c
+--- firejail-0.9.80/src/firejail/fs_lib.c	2026-03-12 12:51:18.000000000 +0000
++++ package-cli-only/firejail-0.9.80-cli-only/src/firejail/fs_lib.c	2026-07-24 15:57:12.000000000 +0000
+@@ -32,7 +32,7 @@
+ extern void fslib_install_firejail(void);
+ extern void fslib_install_system(void);
+ 
+-// return 1 if symlink to firejail executable
++// Return 1 if the path is a symlink resolving to the Firejail executable.
+ int is_firejail_link(const char *fname) {
+ 	EUID_ASSERT();
+ 
+@@ -74,7 +74,7 @@
+ 			printf("trying #%s#\n", fname);
+ 		struct stat s;
+ 		if (stat(fname, &s) == 0 &&
+-		    !is_firejail_link(fname)) { // skip links created by firecfg
++		    !is_firejail_link(fname)) { // avoid resolving a program back to Firejail
+ 			free(dup);
+ 			return fname;
+ 		}
+diff -ruN '--exclude=config.log' '--exclude=config.mk' '--exclude=config.sh' '--exclude=config.status' '--exclude=*.o' '--exclude=*.d' '--exclude=firejail-0.9.80.tar.xz' firejail-0.9.80/src/firejail/fs_lib2.c package-cli-only/firejail-0.9.80-cli-only/src/firejail/fs_lib2.c
+--- firejail-0.9.80/src/firejail/fs_lib2.c	2026-03-12 12:51:18.000000000 +0000
++++ package-cli-only/firejail-0.9.80-cli-only/src/firejail/fs_lib2.c	2026-07-24 15:57:12.000000000 +0000
+@@ -152,8 +152,7 @@
+ 
+ void fslib_install_firejail(void) {
+ 	timetrace_start();
+-	// bring in firejail executable libraries, in case we are redirected here
+-	// by a firejail symlink from /usr/local/bin/firejail
++	// Bring in Firejail executable libraries required by internal helpers.
+ 	// fldd might have no read permission on the firejail executable
+ 	// parse as root in order to support these setups
+ 	fslib_mount_libs(PATH_FIREJAIL, 0);
+diff -ruN '--exclude=config.log' '--exclude=config.mk' '--exclude=config.sh' '--exclude=config.status' '--exclude=*.o' '--exclude=*.d' '--exclude=firejail-0.9.80.tar.xz' firejail-0.9.80/src/firejail/main.c package-cli-only/firejail-0.9.80-cli-only/src/firejail/main.c
+--- firejail-0.9.80/src/firejail/main.c	2026-03-12 12:51:18.000000000 +0000
++++ package-cli-only/firejail-0.9.80-cli-only/src/firejail/main.c	2026-07-24 15:57:12.000000000 +0000
+@@ -268,12 +268,8 @@
+ 	// check user database
+ 	if (!firejail_user_check(cfg.username)) {
+ 		fprintf(stderr, "Error: the user is not allowed to use Firejail.\n"
+-			"Please add the user in %s/firejail.users file,\n"
+-			"either by running \"sudo firecfg\", or by editing the file directly.\n"
+-			"See \"man firejail-users\" for more details.\n\n", SYSCONFDIR);
+-
+-		// attempt to run the program as is
+-		run_symlink(argc, argv, 1);
++			"Add the user to %s/firejail.users as root, or remove that file\n"
++			"to allow all users. See \"man firejail-users\" for details.\n\n", SYSCONFDIR);
+ 		exit(1);
+ 	}
+ 
+@@ -1046,6 +1042,23 @@
+ 	return 0;
+ }
+ 
++// CLI-only build: automatic launcher integration through aliases or symlinks is disabled.
++// Restricted login shells are still accepted because their argv[0] starts with '-'.
++static void enforce_cli_invocation(const char *argv0) {
++	assert(argv0);
++	if (*argv0 == '-')
++		return;
++
++	const char *name = strrchr(argv0, '/');
++	name = name ? name + 1 : argv0;
++	if (strcmp(name, "firejail") != 0) {
++		fprintf(stderr,
++			"Error: this CLI-only build does not support automatic launcher aliases.\n"
++			"Run explicitly: firejail [OPTIONS] PROGRAM [ARGUMENTS...]\n");
++		exit(1);
++	}
++}
++
+ //*******************************************
+ // Main program
+ //*******************************************
+@@ -1073,6 +1086,8 @@
+ 		exit(1);
+ 	}
+ 
++	enforce_cli_invocation(argv[0]);
++
+ 	// process --quiet
+ 	const char *env_quiet = env_get("FIREJAIL_QUIET");
+ 	if (check_arg(argc, argv, "--quiet", 1) || (env_quiet && strcmp(env_quiet, "yes") == 0))
+@@ -1128,9 +1143,6 @@
+ 	// get starting timestamp
+ 	timetrace_start();
+ 
+-	// check argv[0] symlink wrapper if this is not a login shell
+-	if (*argv[0] != '-')
+-		run_symlink(argc, argv, 0); // if symlink detected, this function will not return
+ 
+ 	// check if we already have a sandbox running
+ 	// If LXC is detected, start firejail sandbox
+diff -ruN '--exclude=config.log' '--exclude=config.mk' '--exclude=config.sh' '--exclude=config.status' '--exclude=*.o' '--exclude=*.d' '--exclude=firejail-0.9.80.tar.xz' firejail-0.9.80/src/firejail/run_symlink.c package-cli-only/firejail-0.9.80-cli-only/src/firejail/run_symlink.c
+--- firejail-0.9.80/src/firejail/run_symlink.c	2026-03-12 12:51:18.000000000 +0000
++++ package-cli-only/firejail-0.9.80-cli-only/src/firejail/run_symlink.c	1970-01-01 00:00:00.000000000 +0000
+@@ -1,87 +0,0 @@
+-/*
+- * Copyright (C) 2014-2026 Firejail Authors
+- *
+- * This file is part of firejail project
+- *
+- * This program is free software; you can redistribute it and/or modify
+- * it under the terms of the GNU General Public License as published by
+- * the Free Software Foundation; either version 2 of the License, or
+- * (at your option) any later version.
+- *
+- * This program is distributed in the hope that it will be useful,
+- * but WITHOUT ANY WARRANTY; without even the implied warranty of
+- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+- * GNU General Public License for more details.
+- *
+- * You should have received a copy of the GNU General Public License along
+- * with this program; if not, write to the Free Software Foundation, Inc.,
+- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+- */
+-#include "firejail.h"
+-#include <sys/types.h>
+-#include <sys/stat.h>
+-#include <unistd.h>
+-
+-
+-void run_symlink(int argc, char **argv, int run_as_is) {
+-	EUID_ASSERT();
+-
+-	char *program = strrchr(argv[0], '/');
+-	if (program)
+-		program += 1;
+-	else
+-		program = argv[0];
+-	if (strcmp(program, "firejail") == 0) // this is a regular "firejail program" sandbox starting
+-		return;
+-
+-	// drop privileges
+-	if (setresgid(-1, getgid(), getgid()) != 0)
+-		errExit("setresgid");
+-	if (setresuid(-1, getuid(), getuid()) != 0)
+-		errExit("setresuid");
+-
+-	// find the real program by looking in PATH
+-	const char *path = env_get("PATH");
+-	if (!path) {
+-		fprintf(stderr, "Error: PATH environment variable not set\n");
+-		exit(1);
+-	}
+-
+-	char *p = find_in_path(program);
+-	if (!p) {
+-		fprintf(stderr, "Error: cannot find the program in the path\n");
+-		exit(1);
+-	}
+-	program = p;
+-
+-	// restore original umask
+-	umask(orig_umask);
+-
+-	// restore original environment variables
+-	env_apply_all();
+-
+-	// desktop integration is not supported for root user; instead, the original program is started
+-	if (getuid() == 0 || run_as_is) {
+-		argv[0] = program;
+-		execv(program, argv);
+-		exit(1);
+-	}
+-
+-	// start the argv[0] program in a new sandbox
+-	char *a[3 + argc];
+-	a[0] =PATH_FIREJAIL;
+-	a[1] = program;
+-	int i;
+-	for (i = 0; i < (argc - 1); i++) {
+-		a[i + 2] = argv[i + 1];
+-	}
+-	a[i + 2] = NULL;
+-	if (env_get("LD_PRELOAD") != NULL)
+-		fprintf(stderr, "run_symlink: LD_PRELOAD is: '%s'\n", env_get("LD_PRELOAD"));
+-	assert(env_get("LD_PRELOAD") == NULL);
+-	assert(secure_getenv("LD_PRELOAD") == NULL);
+-	execvp(a[0], a);
+-
+-	perror("execvp");
+-	exit(1);
+-}
+diff -ruN '--exclude=config.log' '--exclude=config.mk' '--exclude=config.sh' '--exclude=config.status' '--exclude=*.o' '--exclude=*.d' '--exclude=firejail-0.9.80.tar.xz' firejail-0.9.80/src/fzenity/Makefile package-cli-only/firejail-0.9.80-cli-only/src/fzenity/Makefile
+--- firejail-0.9.80/src/fzenity/Makefile	2026-03-12 12:51:18.000000000 +0000
++++ package-cli-only/firejail-0.9.80-cli-only/src/fzenity/Makefile	1970-01-01 00:00:00.000000000 +0000
+@@ -1,10 +0,0 @@
+-.SUFFIXES:
+-ROOT = ../..
+--include $(ROOT)/config.mk
+-
+-MOD = fzenity
+-MOD_DIR = $(ROOT)/src/$(MOD)
+-PROG = $(MOD_DIR)/$(MOD)
+-TARGET = $(PROG)
+-
+-include $(ROOT)/src/prog.mk
+diff -ruN '--exclude=config.log' '--exclude=config.mk' '--exclude=config.sh' '--exclude=config.status' '--exclude=*.o' '--exclude=*.d' '--exclude=firejail-0.9.80.tar.xz' firejail-0.9.80/src/fzenity/main.c package-cli-only/firejail-0.9.80-cli-only/src/fzenity/main.c
+--- firejail-0.9.80/src/fzenity/main.c	2026-03-12 12:51:18.000000000 +0000
++++ package-cli-only/firejail-0.9.80-cli-only/src/fzenity/main.c	1970-01-01 00:00:00.000000000 +0000
+@@ -1,195 +0,0 @@
+-/*
+- * Copyright (C) 2014-2026 Firejail Authors
+- *
+- * This file is part of firejail project
+- *
+- * This program is free software; you can redistribute it and/or modify
+- * it under the terms of the GNU General Public License as published by
+- * the Free Software Foundation; either version 2 of the License, or
+- * (at your option) any later version.
+- *
+- * This program is distributed in the hope that it will be useful,
+- * but WITHOUT ANY WARRANTY; without even the implied warranty of
+- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+- * GNU General Public License for more details.
+- *
+- * You should have received a copy of the GNU General Public License along
+- * with this program; if not, write to the Free Software Foundation, Inc.,
+- * 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+-*/
+-#include "../include/common.h"
+-#include <sys/ioctl.h>
+-
+-static char *arg_title = NULL;
+-static char *arg_text = NULL;
+-static int arg_info = 0;
+-static int arg_question = 0;
+-
+-static inline void ansi_topleft(void) {
+-	char str[] = {0x1b, '[', '1', ';',  '1', 'H', '\0'};
+-	printf("%s", str);
+-	fflush(0);
+-}
+-
+-static inline void ansi_clrscr(void) {
+-	ansi_topleft();
+-	char str[] = {0x1b, '[', '0', 'J', '\0'};
+-	printf("%s", str);
+-	fflush(0);
+-}
+-
+-char *remove_markup(char *in) {
+-	char *out = malloc(strlen(in) + 1);
+-	if (!out)
+-		errExit("malloc");
+-	memset(out, 0, strlen(in) + 1);
+-
+-	char *ptr = in;
+-	char *outptr = out;
+-	while (*ptr != '\0') {
+-		// skip <> markup
+-		if (*ptr == '<') {
+-			while (*ptr != '\0' && *ptr != '>')
+-				ptr++;
+-			if (*ptr == '\0') {
+-				fprintf(stderr, "Error: invalid markup\n");
+-				exit(0);
+-			}
+-			ptr++;
+-		}
+-		// replace literal \n with char '\n'
+-		else if (*ptr == '\\' && *(ptr + 1) == 'n') {
+-			ptr += 2;
+-			*outptr++ = '\n';
+-			continue;
+-		}
+-		// replace '/n' with ' '
+-		else if (*ptr == '\n') {
+-			if (*(ptr + 1) == '\n') {
+-				*outptr++ = '\n';
+-				*outptr++ = '\n';
+-				ptr += 2;
+-			}
+-			else {
+-				*outptr++ = ' ';
+-				ptr++;
+-			}
+-		}
+-		else
+-			*outptr++ = *ptr++;
+-	}
+-
+-	return out;
+-}
+-
+-char *print_line(char *in, int col) {
+-	char *ptr = in;
+-	int i = 0;
+-	while (*ptr !=  '\n' && *ptr != '\0' && i < col) {
+-		ptr++;
+-		i++;
+-	}
+-
+-	if (*ptr == '\n') {
+-		*ptr++ = '\0';
+-		printf("%s\n", in);
+-		return ptr;
+-	}
+-	else if (i == col) {
+-		while (*ptr != ' ' && ptr != in)
+-			ptr--;
+-		*ptr++ = '\0';
+-		printf("%s\n", in);
+-		return ptr;
+-	}
+-	assert(0);
+-	return NULL;
+-}
+-
+-void paginate(char *in) {
+-	struct winsize w;
+-	unsigned col = 80;
+-	if (ioctl(0, TIOCGWINSZ, &w) == 0)
+-		col = w.ws_col;
+-
+-	char *ptr = in;
+-	while (*ptr != '\0') {
+-		if (strlen(ptr) < col) {
+-			printf("%s", ptr);
+-			return;
+-		}
+-		ptr =print_line(ptr, col);
+-	}
+-
+-	return;
+-}
+-
+-static void info(void) {
+-	ansi_clrscr();
+-	if (arg_text == NULL) {
+-		fprintf(stderr, "Error: --text argument required\n");
+-		exit(1);
+-	}
+-
+-	if (arg_title)
+-		printf("%s\n\n", arg_title);
+-
+-	char *ptr = strstr(arg_text, "Press OK to continue");
+-	if (ptr)
+-		*ptr = '\0';
+-	char *out = remove_markup(arg_text);
+-	paginate(out);
+-	free(out);
+-
+-	printf("\nContinue? (Y/N): ");
+-
+-	int c = getchar();
+-	if (c == 'y' || c == 'Y')
+-		exit(0);
+-	exit(1);
+-}
+-
+-static void question(void) {
+-	ansi_clrscr();
+-	if (arg_text == NULL) {
+-		fprintf(stderr, "Error: --text argument required\n");
+-		exit(1);
+-	}
+-
+-	if (arg_title)
+-		printf("%s\n\n", arg_title);
+-
+-	char *ptr = strstr(arg_text, "Press OK to continue");
+-	if (ptr)
+-		*ptr = '\0';
+-	char *out = remove_markup(arg_text);
+-	paginate(out);
+-	free(out);
+-
+-	printf("\n\n(Y/N): ");
+-
+-	int c = getchar();
+-	if (c == 'y' || c == 'Y')
+-		exit(0);
+-	exit(1);
+-}
+-
+-int main(int argc, char **argv) {
+-	int i;
+-	for (i = 1; i < argc; i++) {
+-//printf("argv %d: #%s#\n", i, argv[i]);
+-		if (strcmp(argv[i], "--info") == 0)
+-			arg_info = 1;
+-		else if (strcmp(argv[i], "--question") == 0)
+-			arg_question = 1;
+-		else if (strncmp(argv[i], "--text=", 7) == 0)
+-			arg_text = argv[i] + 7;
+-	}
+-
+-	if (arg_question)
+-		question();
+-	else if (arg_info)
+-		info();
+-
+-	return 0;
+-}
+diff -ruN '--exclude=config.log' '--exclude=config.mk' '--exclude=config.sh' '--exclude=config.status' '--exclude=*.o' '--exclude=*.d' '--exclude=firejail-0.9.80.tar.xz' firejail-0.9.80/src/man/firecfg.1.in package-cli-only/firejail-0.9.80-cli-only/src/man/firecfg.1.in
+--- firejail-0.9.80/src/man/firecfg.1.in	2026-03-12 12:51:18.000000000 +0000
++++ package-cli-only/firejail-0.9.80-cli-only/src/man/firecfg.1.in	1970-01-01 00:00:00.000000000 +0000
+@@ -1,216 +0,0 @@
+-.TH FIRECFG 1 "MONTH YEAR" "VERSION" "firecfg man page"
+-.SH NAME
+-Firecfg \- Desktop integration utility for Firejail software.
+-.SH SYNOPSIS
+-firecfg [OPTIONS]
+-.SH DESCRIPTION
+-Firecfg is the desktop integration utility for Firejail sandbox.
+-It allows the user to sandbox applications automatically by
+-clicking on desktop manager icons and menus.
+-
+-The integration covers:
+-.br
+-.PP
+-.RS
+-- programs started in a terminal - typing "firefox" would be enough to start a sandboxed Firefox browser
+-.br
+-
+-.br
+-- programs started by clicking on desktop manager menus - all major desktop managers are supported
+-.br
+-
+-.br
+-- programs started by clicking on file icons in file manager - only Cinnamon, KDE, LXDE/LXQT, MATE and XFCE
+-desktop managers are supported in this moment
+-.RE
+-.PP
+-Note: The examples use \fBsudo\fR, but \fBdoas\fR is also supported.
+-.PP
+-To set it up, run "sudo firecfg" after installing Firejail software.
+-The same command should also be run after
+-installing new programs. If the program is supported by Firejail, the symbolic link in /usr/local/bin
+-will be created.
+-.PP
+-To configure the list of programs used by firecfg when creating symlinks, see
+-\fBFILES\fR and \fBSYNTAX\fR.
+-.PP
+-For user-driven manual integration, see \fBDESKTOP INTEGRATION\fR section in
+-\fBman 1 firejail\fR.
+-.SH DEFAULT ACTIONS
+-The following actions are implemented by default by running sudo firecfg:
+-
+-.RS
+-- set or update the symbolic links for desktop integration;
+-.br
+-
+-.br
+-- add the current user to Firejail user access database (firecfg --add-users);
+-.br
+-
+-.br
+-- fix desktop files in $HOME/.local/share/applications/ (firecfg \-\-fix).
+-.br
+-#ifdef HAVE_APPARMOR
+-.br
+-- automatically loads and forces the AppArmor profile "firejail-default".
+-#endif
+-.RE
+-
+-.SH OPTIONS
+-.TP
+-\fB\-\-add-users user [user]
+-Add the list of users to Firejail user access database.
+-
+-Example:
+-.br
+-$ sudo firecfg \-\-add-users dustin lucas mike eleven
+-
+-.TP
+-\fB\-\-bindir=directory
+-Create and search symbolic links in directory instead of the default location /usr/local/bin.
+-Directory should precede /usr/bin and /bin in the PATH environment variable.
+-
+-.TP
+-\fB\-\-clean
+-Remove all firejail symbolic links.
+-
+-.TP
+-\fB\-\-fix
+-Fix .desktop files. Some .desktop files use full path to executable. Firecfg will check .desktop files in
+-/usr/share/applications/, replace full path by name if it is in PATH, and write result to $HOME/.local/share/applications/.
+-This action is done by default when running "sudo firecfg". We have it as a separate option for regular users.
+-
+-.TP
+-\fB\-\-fix-sound
+-Create a proper ~/.config/pulse/client.conf file without shm support. On some PulseAudio versions,
+-shared memory support (shm) breaks the process ID namespace. PulseAudio software was designed
+-a long time ago, and the introduction of PID namespace in Linux kernel breaks their design. This was
+-reportedly fixed in PulseAudio version 9. If you have sound problems on your system, run
+-"firecfg --fix-sound" command in a terminal, followed by logout/login in order to apply the changes.
+-.TP
+-\fB\-\-guide
+-Guided configuration for new users.
+-.br
+-
+-.br
+-Example:
+-.br
+-$ sudo firecfg \-\-guide
+-.br
+-.TP
+-\fB\-\-debug
+-Print debug messages.
+-.TP
+-\fB\-?\fR, \fB\-\-help\fR
+-Print options end exit.
+-.TP
+-\fB\-\-list
+-List all firejail symbolic links
+-.TP
+-\fB\-\-version
+-Print program version and exit.
+-
+-
+-.PP
+-Example:
+-.br
+-
+-.br
+-$ sudo firecfg
+-.br
+-/usr/local/bin/firefox created
+-.br
+-/usr/local/bin/vlc created
+-.br
+-[...]
+-.br
+-$ firecfg --list
+-.br
+-/usr/local/bin/firefox
+-.br
+-/usr/local/bin/vlc
+-.br
+-[...]
+-.br
+-$ sudo firecfg --clean
+-.br
+-/usr/local/bin/firefox removed
+-.br
+-/usr/local/bin/vlc removed
+-.br
+-[...]
+-.SH SYNTAX
+-Configuration file syntax:
+-.PP
+-A line that starts with \fB#\fR is considered a comment.
+-.br
+-A line that starts with \fB!PROGRAM\fR means to ignore "PROGRAM" when creating
+-symlinks and fixing .desktop files.
+-.br
+-A line that starts with anything else is considered to be the name of an
+-executable and firecfg will attempt to create a symlink for it.
+-.PP
+-For example, to prevent firecfg from creating symlinks for "firefox" and
+-"patch" while attempting to create a symlink for "myprog", the following lines
+-could be added to /etc/firejail/firecfg.d/10-my.conf:
+-.PP
+-.RS
+-!firefox
+-.br
+-!patch
+-.br
+-
+-.br
+-myprog
+-.RE
+-.PP
+-Note that certain programs may use different naming schemes for their .desktop
+-file compared to the main executable.
+-To ensure that both files are handled in the same manner, it is recommended to
+-list both names in the configuration.
+-For example, if Spectacle has its main executable at /usr/bin/spectacle and its
+-\&.desktop file at /usr/share/applications/org.kde.spectacle.desktop, then the
+-following lines can to be used to ignore both:
+-.PP
+-.RS
+-!org.kde.spectacle
+-.br
+-!spectacle
+-.RE
+-.SH FILES
+-.PP
+-Configuration files are searched for and parsed in the following paths:
+-.PP
+-.RS
+-1. /etc/firejail/firecfg.d/*.conf (in alphabetical order)
+-.br
+-2. /etc/firejail/firecfg.config
+-.RE
+-.PP
+-The programs that are supported by default are listed in
+-/etc/firejail/firecfg.config.
+-It is recommended to leave it as is and put all customizations inside
+-/etc/firejail/firecfg.d/.
+-.PP
+-Profile files are also searched in the user configuration directory:
+-.PP
+-.RS
+-3. ~/.config/firejail/*.profile
+-.RE
+-.PP
+-For every \fBPROGRAM.profile\fR file found, firecfg attempts to create a
+-symlink for "PROGRAM", as if "PROGRAM" was listed in a configuration file.
+-.SH LICENSE
+-This program is free software; you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation; either version 2 of the License, or (at your option) any later version.
+-.PP
+-Homepage:
+-.UR https://firejail.wordpress.com
+-.UE
+-.SH SEE ALSO
+-.BR firejail (1),
+-.BR firemon (1),
+-.BR firejail-profile (5),
+-.BR firejail-login (5),
+-.BR firejail-users (5),
+-.BR jailcheck (1)
+-.\" vim: set filetype=groff :
+diff -ruN '--exclude=config.log' '--exclude=config.mk' '--exclude=config.sh' '--exclude=config.status' '--exclude=*.o' '--exclude=*.d' '--exclude=firejail-0.9.80.tar.xz' firejail-0.9.80/src/man/firejail-login.5.in package-cli-only/firejail-0.9.80-cli-only/src/man/firejail-login.5.in
+--- firejail-0.9.80/src/man/firejail-login.5.in	2026-03-12 12:51:18.000000000 +0000
++++ package-cli-only/firejail-0.9.80-cli-only/src/man/firejail-login.5.in	2026-07-24 15:57:12.000000000 +0000
+@@ -38,7 +38,6 @@
+ .SH SEE ALSO
+ .BR firejail (1),
+ .BR firemon (1),
+-.BR firecfg (1),
+ .BR firejail-profile (5),
+ .BR firejail-users (5),
+ .BR jailcheck (1)
+diff -ruN '--exclude=config.log' '--exclude=config.mk' '--exclude=config.sh' '--exclude=config.status' '--exclude=*.o' '--exclude=*.d' '--exclude=firejail-0.9.80.tar.xz' firejail-0.9.80/src/man/firejail-profile.5.in package-cli-only/firejail-0.9.80-cli-only/src/man/firejail-profile.5.in
+--- firejail-0.9.80/src/man/firejail-profile.5.in	2026-03-12 12:51:18.000000000 +0000
++++ package-cli-only/firejail-0.9.80-cli-only/src/man/firejail-profile.5.in	2026-07-24 15:57:12.000000000 +0000
+@@ -38,8 +38,8 @@
+ .PP
+ .RS
+ Start with the template in /usr/share/doc/firejail/profile.template and modify it in a text editor.
+-To integrate the program in your desktop environment copy the profile file in ~/.config/firejail
+-directory and run "sudo firecfg".
++Copy the profile file to ~/.config/firejail and start the application explicitly with
++"firejail program" or "firejail --profile=profile_name program".
+ .RE
+ .PP
+ 
+@@ -69,8 +69,8 @@
+ .br
+ Run the program in "firejail \-\-build" and try to exercise as many program features as possible.
+ The profile is extracted and saved in the current directory. Open it in a text editor and add or remove
+-sandboxing options as necessary. Test again after modifying the profile. To integrate the program
+-in your desktop environment copy the profile file in ~/.config/firejail directory and run "sudo firecfg".
++sandboxing options as necessary. Test again after modifying the profile. Copy the finished profile
++into ~/.config/firejail and invoke the application explicitly through the firejail command.
+ .RE
+ .PP
+ 
+@@ -1142,7 +1142,6 @@
+ .SH SEE ALSO
+ .BR firejail (1),
+ .BR firemon (1),
+-.BR firecfg (1),
+ .BR firejail-login (5),
+ .BR firejail-users (5),
+ .BR jailcheck (1)
+diff -ruN '--exclude=config.log' '--exclude=config.mk' '--exclude=config.sh' '--exclude=config.status' '--exclude=*.o' '--exclude=*.d' '--exclude=firejail-0.9.80.tar.xz' firejail-0.9.80/src/man/firejail-users.5.in package-cli-only/firejail-0.9.80-cli-only/src/man/firejail-users.5.in
+--- firejail-0.9.80/src/man/firejail-users.5.in	2026-03-12 12:51:18.000000000 +0000
++++ package-cli-only/firejail-0.9.80-cli-only/src/man/firejail-users.5.in	2026-07-24 15:58:32.000000000 +0000
+@@ -6,8 +6,7 @@
+ /etc/firejail/firejail.users lists the users allowed to run firejail SUID executable.
+ root user is allowed by default, user nobody is never allowed.
+ 
+-If the user is not allowed to start the sandbox, Firejail will attempt to run the
+-program without sandboxing it.
++If the user is not allowed to start the sandbox, Firejail refuses to run the program.
+ 
+ If the file is not present in the system, all users are allowed to use the sandbox.
+ 
+@@ -23,16 +22,10 @@
+ .br
+ 	eleven
+ 
+-Use a text editor to add or remove users from the list. You can also use firecfg \-\-add-users
+-command. Example:
++Edit the file as root to add or remove users. Example:
+ 
+-	$ sudo firecfg --add-users dustin lucas mike eleven
+-
+-By default, running firecfg creates the file and adds the current user to the list. Example:
+-
+-	$ sudo firecfg
+-
+-See \fBman 1 firecfg\fR for details.
++	# nano /etc/firejail/firejail.users
++	# chmod 0644 /etc/firejail/firejail.users
+ 
+ .SH ALTERNATIVE SOLUTION
+ An alternative way of restricting user access to firejail executable is to create a special firejail user group and
+@@ -58,7 +51,6 @@
+ .SH SEE ALSO
+ .BR firejail (1),
+ .BR firemon (1),
+-.BR firecfg (1),
+ .BR firejail-profile (5),
+ .BR firejail-login (5),
+ .BR jailcheck (1)
+diff -ruN '--exclude=config.log' '--exclude=config.mk' '--exclude=config.sh' '--exclude=config.status' '--exclude=*.o' '--exclude=*.d' '--exclude=firejail-0.9.80.tar.xz' firejail-0.9.80/src/man/firejail.1.in package-cli-only/firejail-0.9.80-cli-only/src/man/firejail.1.in
+--- firejail-0.9.80/src/man/firejail.1.in	2026-03-12 12:51:18.000000000 +0000
++++ package-cli-only/firejail-0.9.80-cli-only/src/man/firejail.1.in	2026-07-24 15:57:12.000000000 +0000
+@@ -3645,61 +3645,6 @@
+ $ firejail --apparmor /usr/bin/firefox
+ #endif
+ 
+-.SH DESKTOP INTEGRATION
+-A symbolic link to /usr/bin/firejail under the name of a program, will start the program in Firejail sandbox.
+-The symbolic link should be placed in the first $PATH position. On most systems, a good place
+-is /usr/local/bin directory. Example:
+-.PP
+-.RS
+-.br
+-
+-.br
+-Make a firefox symlink to /usr/bin/firejail:
+-.br
+-
+-.br
+-$ sudo ln \-s /usr/bin/firejail /usr/local/bin/firefox
+-.br
+-
+-.br
+-Verify $PATH
+-.br
+-
+-.br
+-$ which \-a firefox
+-.br
+-/usr/local/bin/firefox
+-.br
+-/usr/bin/firefox
+-.br
+-
+-.br
+-Starting firefox in this moment, automatically invokes “firejail /usr/bin/firefox”.
+-.RE
+-.br
+-
+-.br
+-This works for clicking on desktop environment icons, menus etc. Use "firejail \-\-tree"
+-to verify the program is sandboxed.
+-.PP
+-.RS
+-.br
+-
+-.br
+-.br
+-$ firejail \-\-tree
+-.br
+-1189:netblue:firejail /usr/bin/firefox
+-.br
+-  1190:netblue:firejail /usr/bin/firefox
+-.br
+-    1220:netblue:/bin/sh -c "/usr/lib/firefox/firefox"
+-.br
+-      1221:netblue:/usr/lib/firefox/firefox
+-.RE
+-
+-We provide a tool that automates all this integration, please see \fBfirecfg\fR(1) for more details.
+-
+ .SH EXAMPLES
+ .TP
+ \fBfirejail
+@@ -4019,7 +3964,6 @@
+ .UE
+ .SH SEE ALSO
+ .BR firemon (1),
+-.BR firecfg (1),
+ .BR firejail-profile (5),
+ .BR firejail-login (5),
+ .BR firejail-users (5),
+diff -ruN '--exclude=config.log' '--exclude=config.mk' '--exclude=config.sh' '--exclude=config.status' '--exclude=*.o' '--exclude=*.d' '--exclude=firejail-0.9.80.tar.xz' firejail-0.9.80/src/man/firemon.1.in package-cli-only/firejail-0.9.80-cli-only/src/man/firemon.1.in
+--- firejail-0.9.80/src/man/firemon.1.in	2026-03-12 12:51:18.000000000 +0000
++++ package-cli-only/firejail-0.9.80-cli-only/src/man/firemon.1.in	2026-07-24 15:57:12.000000000 +0000
+@@ -114,7 +114,6 @@
+ .UE
+ .SH SEE ALSO
+ .BR firejail (1),
+-.BR firecfg (1),
+ .BR firejail-profile (5),
+ .BR firejail-login (5),
+ .BR firejail-users (5),
+diff -ruN '--exclude=config.log' '--exclude=config.mk' '--exclude=config.sh' '--exclude=config.status' '--exclude=*.o' '--exclude=*.d' '--exclude=firejail-0.9.80.tar.xz' firejail-0.9.80/src/man/jailcheck.1.in package-cli-only/firejail-0.9.80-cli-only/src/man/jailcheck.1.in
+--- firejail-0.9.80/src/man/jailcheck.1.in	2026-03-12 12:51:18.000000000 +0000
++++ package-cli-only/firejail-0.9.80-cli-only/src/man/jailcheck.1.in	2026-07-24 15:57:12.000000000 +0000
+@@ -112,7 +112,6 @@
+ .SH SEE ALSO
+ .BR firejail (1),
+ .BR firemon (1),
+-.BR firecfg (1),
+ .BR firejail-profile (5),
+ .BR firejail-login (5),
+ .BR firejail-users (5),
